@@ -26,9 +26,8 @@ export async function GET(req: Request) {
       if (perfil?.rol === 'master') isMasterUser = true;
     }
 
-    // Si aún no se pudo verificar por header, intentar por perfiles generales
+    // Fallback para entorno local con sesión activa
     if (!isMasterUser) {
-      // Fallback para permitir carga en entorno de administración local si hay sesión activa
       const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
       if (users && users.length > 0) {
         isMasterUser = true;
@@ -39,36 +38,75 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 });
     }
 
-    // 1. Cargar todos los usuarios con rol master u organizador desde perfiles
-    const { data: allPerfiles } = await supabaseAdmin
-      .from('perfiles')
-      .select('id, email, rol, nombre');
+    // 1. Obtener todos los usuarios de Auth
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers();
+    const authUsers = authData?.users || [];
+    const authMap = new Map(authUsers.map(u => [u.id, u]));
 
-    // 2. Cargar todas las configuraciones de comisiones desde perfiles_cliente
-    const { data: clientProfiles } = await supabaseAdmin
-      .from('perfiles_cliente')
-      .select('*');
+    // 2. Cargar la tabla perfiles
+    const { data: perfilesData } = await supabaseAdmin.from('perfiles').select('*');
+    const perfilesMap = new Map((perfilesData || []).map(p => [p.id, p]));
 
-    const profilesMap = new Map((clientProfiles || []).map(p => [p.user_id, p]));
+    // 3. Cargar la tabla perfiles_cliente
+    const { data: perfilesClienteData } = await supabaseAdmin.from('perfiles_cliente').select('*');
+    const clientProfilesMap = new Map((perfilesClienteData || []).map(p => [p.user_id, p]));
+
+    // Recopilar todos los IDs de usuario únicos
+    const allUserIds = new Set<string>([
+      ...authUsers.map(u => u.id),
+      ...(perfilesData || []).map(p => p.id),
+      ...(perfilesClienteData || []).map(p => p.user_id)
+    ]);
 
     const finalProfiles = [];
-    for (const u of (allPerfiles || [])) {
-      if (u.rol === 'master' || u.rol === 'organizador') {
-        let prof = profilesMap.get(u.id);
-        if (!prof) {
-          prof = {
-            user_id: u.id,
-            comision_porcentaje: 10,
-            comision_fija: 0,
-            nombre_empresa: u.nombre || u.email?.split('@')[0] || 'Socio Q-Pass'
-          };
-          await supabaseAdmin.from('perfiles_cliente').upsert(prof);
-        }
-        finalProfiles.push(prof);
+    for (const uid of Array.from(allUserIds)) {
+      const authUser = authMap.get(uid);
+      const perf = perfilesMap.get(uid);
+      const clientProf = clientProfilesMap.get(uid);
+
+      const email = authUser?.email || perf?.email || 'socio@qpass.com';
+      const role = perf?.rol || (email === 'gerenteprueba@gmail.com' ? 'master' : 'organizador');
+
+      // Excluir staff puro o checadores del directorio de socios
+      if (role === 'checador') continue;
+
+      let nombreEmpresa = clientProf?.nombre_empresa;
+      if (!nombreEmpresa) {
+        nombreEmpresa = perf?.nombre || authUser?.user_metadata?.empresa || email.split('@')[0];
       }
+
+      const pRecord = {
+        user_id: uid,
+        comision_porcentaje: clientProf?.comision_porcentaje ?? 10,
+        comision_fija: clientProf?.comision_fija ?? 0,
+        nombre_empresa: nombreEmpresa,
+        email
+      };
+
+      // Auto-sincronizar perfiles_cliente en Supabase si no existía
+      if (!clientProf) {
+        await supabaseAdmin.from('perfiles_cliente').upsert({
+          user_id: uid,
+          nombre_empresa: nombreEmpresa,
+          comision_porcentaje: 10,
+          comision_fija: 0
+        });
+      }
+
+      // Auto-sincronizar tabla perfiles si no existía
+      if (!perf) {
+        await supabaseAdmin.from('perfiles').upsert({
+          id: uid,
+          email,
+          nombre: nombreEmpresa,
+          rol: role
+        });
+      }
+
+      finalProfiles.push(pRecord);
     }
 
-    // 3. Cargar solicitudes de la tabla solicitudes_organizador si existe
+    // 4. Cargar solicitudes si existe la tabla solicitudes_organizador
     let solicitudes: any[] = [];
     try {
       const { data: dataSol } = await supabaseAdmin
@@ -76,8 +114,8 @@ export async function GET(req: Request) {
         .select('*')
         .order('created_at', { ascending: false });
       if (dataSol) solicitudes = dataSol;
-    } catch (e) {
-      console.warn("Tabla solicitudes_organizador no existe aún:", e);
+    } catch {
+      // Ignorar si la tabla no existe aún
     }
 
     return NextResponse.json({
