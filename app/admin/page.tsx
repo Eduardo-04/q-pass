@@ -34,6 +34,15 @@ export default function AdminPortal() {
   const [userProfile, setUserProfile] = useState<PerfilCliente | null>(null);
   const [showClientes, setShowClientes] = useState(false);
   const [perfiles, setPerfiles] = useState<PerfilCliente[]>([]);
+  const [solicitudes, setSolicitudes] = useState<Array<{
+    id?: string;
+    nombre_empresa?: string;
+    nombre_contacto?: string;
+    email?: string;
+    telefono?: string;
+    aforo_estimado?: string;
+    created_at?: string;
+  }>>([]);
   const [busquedaSocios, setBusquedaSocios] = useState("");
 
   const hoy = new Date().toISOString().split("T")[0];
@@ -117,6 +126,17 @@ export default function AdminPortal() {
       }
 
       setPerfiles(finalProfiles);
+
+      // Cargar solicitudes pendientes de socios
+      try {
+        const resSol = await fetch("/api/solicitudes-organizador");
+        const dataSol = await resSol.json();
+        if (dataSol.success) {
+          setSolicitudes(dataSol.solicitudes || []);
+        }
+      } catch (e) {
+        console.warn("Error cargando solicitudes:", e);
+      }
     }
   }, [currentUser, isMaster, editingId]);
 
@@ -443,6 +463,54 @@ export default function AdminPortal() {
                 </p>
               </div>
             </div>
+
+            {/* Solicitudes Entrantes desde Landing Page */}
+            {solicitudes.length > 0 && (
+              <div className="rounded-xl border border-emerald-500/20 bg-[#111823] p-6 shadow-2xl space-y-4">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1">
+                    Leads Entrantes desde Landing Page
+                  </div>
+                  <h3 className="text-lg font-bold text-white">Solicitudes de Nuevos Organizadores</h3>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/5 text-left text-[10px] uppercase tracking-wider text-slate-500">
+                        <th className="px-4 py-3">Empresa / Evento</th>
+                        <th className="px-4 py-3">Contacto</th>
+                        <th className="px-4 py-3">Email</th>
+                        <th className="px-4 py-3">Teléfono</th>
+                        <th className="px-4 py-3">Aforo</th>
+                        <th className="px-4 py-3 text-right">Contacto</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {solicitudes.map((sol, idx) => (
+                        <tr key={sol.id || idx} className="text-slate-300 transition hover:bg-white/[0.02]">
+                          <td className="px-4 py-3 font-semibold text-white">{sol.nombre_empresa}</td>
+                          <td className="px-4 py-3 text-xs">{sol.nombre_contacto}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-cyan-300">{sol.email}</td>
+                          <td className="px-4 py-3 text-xs font-mono">{sol.telefono}</td>
+                          <td className="px-4 py-3 text-xs text-amber-300 font-semibold">{sol.aforo_estimado}</td>
+                          <td className="px-4 py-3 text-right">
+                            <a
+                              href={`https://wa.me/${(sol.telefono || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${sol.nombre_contacto} 👋, te escribo de Q-Pass sobre tu solicitud para ${sol.nombre_empresa}.`)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition"
+                            >
+                              💬 Contactar por WhatsApp
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
