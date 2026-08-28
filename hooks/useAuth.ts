@@ -49,8 +49,8 @@ export function useAuth(): AuthState {
         .single()
 
       let assignedRole: UserRole = (perfil?.rol as UserRole) || 'staff'
-      if (assignedRole === 'staff') {
-        if (user.email === 'gerenteprueba@gmail.com') assignedRole = 'organizador'
+      if (!perfil?.rol || perfil.rol === 'staff' || user.email === 'gerenteprueba@gmail.com') {
+        if (user.email === 'gerenteprueba@gmail.com') assignedRole = 'master'
         else if (user.email === 'puerta1@qpass.com') assignedRole = 'checador'
       }
 

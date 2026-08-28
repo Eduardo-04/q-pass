@@ -62,7 +62,7 @@ export async function getUserRole(userId: string): Promise<UserRole> {
   const { data: userData } = await supabase.auth.admin.getUserById(userId)
   const email = userData?.user?.email
 
-  if (email === 'gerenteprueba@gmail.com') return 'organizador'
+  if (email === 'gerenteprueba@gmail.com') return 'master'
   if (email === 'puerta1@qpass.com') return 'checador'
 
   return (data?.rol as UserRole) || 'staff'
