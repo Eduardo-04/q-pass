@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     }
 
     const supabaseAdmin = createAdminClient();
+    const cleanEmail = email.toLowerCase().trim();
 
     // 1. Intentar guardar en la tabla dedicada solicitudes_organizador
     const { error: errInsert } = await supabaseAdmin
@@ -23,32 +24,62 @@ export async function POST(req: Request) {
         {
           nombre_empresa: nombreEmpresa,
           nombre_contacto: nombreContacto,
-          email: email.toLowerCase().trim(),
+          email: cleanEmail,
           telefono,
           aforo_estimado: aforoEstimado || '100-500',
           estado: 'pendiente'
         }
       ]);
 
-    // 2. Si la tabla no existe aún, hacer fallback seguro insertando un perfil de cliente borrador
+    // 2. Si la tabla dedicada no existe aún en Supabase, auto-crear la cuenta de socio en Auth y Perfiles
     if (errInsert) {
-      console.warn("Tabla solicitudes_organizador no encontrada. Usando respaldo en perfiles_cliente:", errInsert.message);
+      console.warn("Tabla solicitudes_organizador no existe en Supabase. Creando cuenta de socio en perfiles_cliente:", errInsert.message);
       
-      const dummyId = crypto.randomUUID();
-      await supabaseAdmin.from('perfiles_cliente').insert([{
-        user_id: dummyId,
-        nombre_empresa: `📌 SOLICITUD: ${nombreEmpresa} (${nombreContacto} - Tel: ${telefono})`,
-        comision_porcentaje: 10,
-        comision_fija: 0
-      }]);
+      try {
+        // Crear usuario en Auth de Supabase si no existe
+        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          email_confirm: true,
+          user_metadata: { nombre: nombreContacto, empresa: nombreEmpresa }
+        });
+
+        let targetUserId = newUser?.user?.id;
+
+        // Si el correo ya existía en Auth, obtener su ID
+        if (createErr || !targetUserId) {
+          const { data: listUsers } = await supabaseAdmin.auth.admin.listUsers();
+          const existing = listUsers?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+          if (existing) targetUserId = existing.id;
+        }
+
+        if (targetUserId) {
+          // Registrar en tabla perfiles como organizador
+          await supabaseAdmin.from('perfiles').upsert({
+            id: targetUserId,
+            email: cleanEmail,
+            nombre: nombreContacto,
+            rol: 'organizador'
+          });
+
+          // Registrar en perfiles_cliente con el nombre de la empresa
+          await supabaseAdmin.from('perfiles_cliente').upsert({
+            user_id: targetUserId,
+            nombre_empresa: nombreEmpresa,
+            comision_porcentaje: 10,
+            comision_fija: 0
+          });
+        }
+      } catch (authErr) {
+        console.error("Error en auto-provisionamiento de socio:", authErr);
+      }
     }
 
-    // 3. Armar mensaje limpio sin caracteres ni codificación extraña para WhatsApp
+    // 3. Armar mensaje limpio de WhatsApp
     const mensajeLimpio = 
       `Hola Q-Pass! Solicito alta como Organizador para mi evento.\n\n` +
       `*Empresa / Evento:* ${nombreEmpresa}\n` +
       `*Contacto:* ${nombreContacto}\n` +
-      `*Email:* ${email}\n` +
+      `*Email:* ${cleanEmail}\n` +
       `*Teléfono:* ${telefono}\n` +
       `*Aforo Estimado:* ${aforoEstimado || '100-500'}`;
 
