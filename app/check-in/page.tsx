@@ -237,8 +237,8 @@ export default function CheckInPage() {
             <input
               name="manualInput"
               type="text"
-              placeholder="Ingresar ID o código manualmente..."
-              className="flex-1 rounded-xl border border-white/15 bg-[#0a0f14] px-3.5 py-2.5 text-xs text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 font-mono"
+              placeholder="Ingresa Folio de 8 dígitos (ej. 75F9EA34)"
+              className="flex-1 rounded-xl border border-white/15 bg-[#0a0f14] px-3.5 py-2.5 text-xs text-cyan-300 uppercase placeholder:text-slate-500 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 font-mono tracking-widest font-bold"
             />
             <button
               type="submit"

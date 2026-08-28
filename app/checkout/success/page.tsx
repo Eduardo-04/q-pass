@@ -178,8 +178,8 @@ function SuccessContent() {
                 </div>
                 <p className="text-base font-bold text-white leading-snug">{ticket.nombre_comprador}</p>
                 <p className="text-xs text-slate-300 font-mono truncate">{ticket.email_comprador}</p>
-                <p className="text-[10px] font-mono text-slate-400 pt-1">
-                  ID Pase: <span className="text-slate-300">{ticket.id.slice(0, 8)}...{ticket.id.slice(-4)}</span>
+                <p className="text-[11px] font-mono text-cyan-300 pt-1">
+                  Folio Manual: <span className="font-bold bg-cyan-400/10 px-2 py-0.5 rounded border border-cyan-400/20">{ticket.id.slice(0, 8).toUpperCase()}</span>
                 </p>
               </div>
             </div>
