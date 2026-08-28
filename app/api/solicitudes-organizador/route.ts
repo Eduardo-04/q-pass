@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       `🎟️ *Aforo Estimado:* ${aforoEstimado || '100-500'}`
     );
 
-    const whatsappPhone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '5219610000000';
+    const whatsappPhone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '529665939118';
     const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${mensajeWA}`;
 
     return NextResponse.json({
