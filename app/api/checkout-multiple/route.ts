@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/utils/supabase/admin';
+import { sendTicketConfirmationEmail } from '@/lib/email';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
@@ -15,17 +16,20 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { eventoId, asistentes, total } = body;
+    const rawEventoId = body.eventoId || body.evento_id;
+    const rawAsistentes = body.asistentes;
+    const rawTotal = body.total;
+    const emailComprador = body.email_comprador || (Array.isArray(rawAsistentes) && rawAsistentes[0]?.email);
 
     // ── Validaciones de entrada ──
-    if (!eventoId || typeof eventoId !== 'string') {
+    if (!rawEventoId || typeof rawEventoId !== 'string') {
       return NextResponse.json(
         { success: false, error: 'ID de evento inválido' },
         { status: 400 }
       );
     }
 
-    if (!Array.isArray(asistentes) || asistentes.length === 0 || asistentes.length > 10) {
+    if (!Array.isArray(rawAsistentes) || rawAsistentes.length === 0 || rawAsistentes.length > 10) {
       return NextResponse.json(
         { success: false, error: 'Cantidad de asistentes inválida (1–10)' },
         { status: 400 }
@@ -34,7 +38,7 @@ export async function POST(req: Request) {
 
     // Validar cada asistente
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    for (const asistente of asistentes) {
+    for (const asistente of rawAsistentes) {
       if (!asistente.nombreCompleto || typeof asistente.nombreCompleto !== 'string' || asistente.nombreCompleto.trim().length < 2) {
         return NextResponse.json(
           { success: false, error: 'Nombre de asistente inválido' },
@@ -51,27 +55,24 @@ export async function POST(req: Request) {
 
     const supabaseAdmin = createAdminClient();
 
-    // ── Verificar evento (Info básica y vigencia) ──
-    const hoy = new Date().toISOString().split('T')[0];
+    // ── Verificar evento (Info básica) ──
     const { data: evento, error: eventoError } = await supabaseAdmin
       .from('eventos')
-      .select('id, nombre, capacidad, precio, activo, visible_desde, visible_hasta')
-      .eq('id', eventoId)
+      .select('id, nombre, capacidad, precio, activo, fecha_evento')
+      .eq('id', rawEventoId)
       .eq('activo', true)
-      .lte('visible_desde', hoy)
-      .gte('visible_hasta', hoy)
       .single();
 
     if (eventoError || !evento) {
       return NextResponse.json(
-        { success: false, error: 'Evento no disponible o fuera de periodo de venta' },
+        { success: false, error: 'Evento no disponible' },
         { status: 400 }
       );
     }
 
-    // Validar que el total enviado coincide con el precio real
-    const totalEsperado = asistentes.length * evento.precio;
-    if (typeof total !== 'number' || Math.abs(total - totalEsperado) > 0.01) {
+    // Validar total si fue proporcionado
+    const totalEsperado = rawAsistentes.length * evento.precio;
+    if (typeof rawTotal === 'number' && Math.abs(rawTotal - totalEsperado) > 0.01) {
       return NextResponse.json(
         { success: false, error: 'El total no coincide con el precio del evento' },
         { status: 400 }
@@ -79,13 +80,12 @@ export async function POST(req: Request) {
     }
 
     // ── LLAMADA ATÓMICA AL RPC ──
-    // Este RPC verifica capacidad (con bloqueo FOR UPDATE) e inserta Order + Boletos
     const esGratuito = totalEsperado === 0;
     const statusInicial = (esGratuito || stripeKey === 'simulated') ? 'paid' : 'pending';
     
     const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('process_ticket_purchase', {
-      p_evento_id: eventoId,
-      p_asistentes: asistentes,
+      p_evento_id: rawEventoId,
+      p_asistentes: rawAsistentes,
       p_total_amount: totalEsperado,
       p_payment_status: statusInicial
     });
@@ -102,10 +102,24 @@ export async function POST(req: Request) {
     // ── BOLETOS GRATUITOS O MODO SIMULACIÓN ──
     if (esGratuito || stripeKey === 'simulated') {
       console.log(esGratuito ? '--- REGISTRO GRATUITO PROCESADO ---' : '--- MODO SIMULACIÓN ACTIVADO ---');
+      
+      // Disparar envío de correo en segundo plano
+      sendTicketConfirmationEmail({
+        orderId,
+        emailComprador: emailComprador || rawAsistentes[0].email,
+        nombreEvento: evento.nombre,
+        fechaEvento: evento.fecha_evento,
+        cantidadBoletos: rawAsistentes.length,
+        totalAmount: totalEsperado,
+        tickets: []
+      }).catch(e => console.error("Async email dispatch error:", e));
+
       const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
       return NextResponse.json({
         success: true,
-        url: `${origin}/checkout/success?session_id=sim_${orderId}_${eventoId}`
+        directIssued: true,
+        orderId,
+        url: `${origin}/checkout/success?order_id=${orderId}`
       });
     }
 
@@ -122,11 +136,11 @@ export async function POST(req: Request) {
             currency: 'mxn',
             product_data: {
               name: `Boletos para ${evento.nombre}`,
-              description: `${asistentes.length} boleto(s) de acceso general`,
+              description: `${rawAsistentes.length} boleto(s) de acceso general`,
             },
             unit_amount: Math.round(evento.precio * 100),
           },
-          quantity: asistentes.length,
+          quantity: rawAsistentes.length,
         },
       ],
       mode: 'payment',
@@ -135,7 +149,7 @@ export async function POST(req: Request) {
       client_reference_id: orderId,
       metadata: {
         order_id: orderId,
-        evento_id: eventoId,
+        evento_id: rawEventoId,
       },
     });
 
