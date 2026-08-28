@@ -101,14 +101,16 @@ export default function HomePage() {
         showMessage(`Ingresa el nombre completo del asistente ${i + 1}`, "error");
         return false;
       }
-      if (!asistente.email.trim()) {
-        showMessage(`Ingresa el email del asistente ${i + 1}`, "error");
-        return false;
-      }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(asistente.email)) {
-        showMessage(`Email inválido para el asistente ${i + 1}`, "error");
-        return false;
+      if (i === 0) {
+        if (!asistente.email.trim()) {
+          showMessage("Ingresa el correo electrónico del comprador principal", "error");
+          return false;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(asistente.email)) {
+          showMessage("Correo electrónico inválido para el comprador principal", "error");
+          return false;
+        }
       }
     }
     return true;
