@@ -94,48 +94,17 @@ export default function AdminPortal() {
 
     setEventos((data ?? []) as Evento[]);
 
-    // Si es Master, cargar todos los usuarios organizadores/socios desde perfiles
+    // Si es Master, cargar todos los socios y solicitudes desde la API Admin (bypass RLS)
     if (isMaster) {
-      const { data: allUsers } = await supabase
-        .from("perfiles")
-        .select("id, email, rol, nombre");
-
-      const { data: existingProfiles } = await supabase
-        .from("perfiles_cliente")
-        .select("*");
-
-      const profilesMap = new Map((existingProfiles || []).map(p => [p.user_id, p]));
-
-      // Auto-crear entrada de perfil cliente para cada usuario que no la tenga
-      const finalProfiles: PerfilCliente[] = [];
-      for (const u of (allUsers || [])) {
-        if (u.rol === "master" || u.rol === "organizador") {
-          let prof = profilesMap.get(u.id);
-          if (!prof) {
-            prof = {
-              user_id: u.id,
-              comision_porcentaje: 10,
-              comision_fija: 0,
-              nombre_empresa: u.nombre || u.email?.split('@')[0] || 'Socio Q-Pass'
-            };
-            // Intentar persistir silenciosamente
-            await supabase.from("perfiles_cliente").upsert(prof);
-          }
-          finalProfiles.push(prof);
-        }
-      }
-
-      setPerfiles(finalProfiles);
-
-      // Cargar solicitudes pendientes de socios
       try {
-        const resSol = await fetch("/api/solicitudes-organizador");
-        const dataSol = await resSol.json();
-        if (dataSol.success) {
-          setSolicitudes(dataSol.solicitudes || []);
+        const resSocios = await fetch("/api/admin/socios");
+        const dataSocios = await resSocios.json();
+        if (dataSocios.success) {
+          setPerfiles(dataSocios.perfiles || []);
+          setSolicitudes(dataSocios.solicitudes || []);
         }
       } catch (e) {
-        console.warn("Error cargando solicitudes:", e);
+        console.warn("Error cargando socios:", e);
       }
     }
   }, [currentUser, isMaster, editingId]);
