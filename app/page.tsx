@@ -8,13 +8,16 @@ import {
   TrendingUp, 
   Zap, 
   ChevronRight,
-  CheckCircle2,
   Building2,
   Phone,
   Mail,
   User,
   X,
-  MessageSquare
+  MessageSquare,
+  QrCode,
+  Smartphone,
+  BarChart3,
+  CalendarCheck
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,7 +70,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0f14] text-white overflow-x-hidden">
+    <div className="min-h-screen bg-[#0a0f14] text-white overflow-x-hidden selection:bg-cyan-500 selection:text-black">
       {/* Navbar Minimalista */}
       <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-[#0a0f14]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
@@ -75,7 +78,7 @@ export default function LandingPage() {
             <Image src="/q-pass-logo.png" alt="Q-Pass Logo" width={40} height={40} />
             <span className="text-xl font-bold tracking-tighter text-white">Q-PASS</span>
           </Link>
-          <div className="hidden items-center gap-6 md:flex">
+          <div className="hidden items-center gap-8 md:flex">
             <a href="#beneficios" className="text-sm font-medium text-slate-400 transition hover:text-cyan-400">Beneficios</a>
             <a href="#como-funciona" className="text-sm font-medium text-slate-400 transition hover:text-cyan-400">Cómo funciona</a>
             <button
@@ -177,6 +180,81 @@ export default function LandingPage() {
               <h3 className="text-xl font-bold text-white mb-3">Transparencia Financiera</h3>
               <p className="text-slate-400 text-sm leading-relaxed">
                 Dashboard en tiempo real con cálculo exacto de comisiones y exportación directa a reportes en Excel.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sección Cómo Funciona (Paso a Paso) */}
+      <section id="como-funciona" className="py-24 bg-[#0a0f14] relative">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="mb-16 text-center">
+            <div className="inline-block rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-cyan-300 mb-3">
+              Proceso Simple en 4 Pasos
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
+              ¿Cómo funciona Q-Pass?
+            </h2>
+            <p className="mt-4 text-slate-400 max-w-2xl mx-auto">
+              Tanto si vas a asistir a un evento como si eres el organizador, el flujo está diseñado para tomar segundos.
+            </p>
+          </div>
+
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Paso 1 */}
+            <div className="relative rounded-2xl border border-white/10 bg-[#111823] p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl font-black text-cyan-400/40">01</span>
+                <div className="rounded-xl bg-cyan-400/10 p-2.5 text-cyan-400 border border-cyan-400/20">
+                  <CalendarCheck size={22} />
+                </div>
+              </div>
+              <h3 className="text-lg font-bold text-white">Solicita tu Alta</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Llena el formulario en 30 segundos y un asesor te atenderá por WhatsApp para configurar tu evento y comisiones.
+              </p>
+            </div>
+
+            {/* Paso 2 */}
+            <div className="relative rounded-2xl border border-white/10 bg-[#111823] p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl font-black text-cyan-400/40">02</span>
+                <div className="rounded-xl bg-cyan-400/10 p-2.5 text-cyan-400 border border-cyan-400/20">
+                  <QrCode size={22} />
+                </div>
+              </div>
+              <h3 className="text-lg font-bold text-white">Publica y Vende</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Tus compradores adquieren sus accesos en línea y reciben instantáneamente sus pases QR por correo y PDF.
+              </p>
+            </div>
+
+            {/* Paso 3 */}
+            <div className="relative rounded-2xl border border-white/10 bg-[#111823] p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl font-black text-cyan-400/40">03</span>
+                <div className="rounded-xl bg-cyan-400/10 p-2.5 text-cyan-400 border border-cyan-400/20">
+                  <Smartphone size={22} />
+                </div>
+              </div>
+              <h3 className="text-lg font-bold text-white">Escanea en Puerta</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Tu equipo usa cualquier teléfono móvil para escanear los QRs o escribir el Folio corto de 8 dígitos en puerta.
+              </p>
+            </div>
+
+            {/* Paso 4 */}
+            <div className="relative rounded-2xl border border-white/10 bg-[#111823] p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl font-black text-cyan-400/40">04</span>
+                <div className="rounded-xl bg-cyan-400/10 p-2.5 text-cyan-400 border border-cyan-400/20">
+                  <BarChart3 size={22} />
+                </div>
+              </div>
+              <h3 className="text-lg font-bold text-white">Monitorea y Cobra</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Consulta asistencias en vivo desde tu Dashboard, audita comisiones y descarga reportes contables en Excel.
               </p>
             </div>
           </div>
