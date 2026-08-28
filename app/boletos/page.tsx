@@ -211,6 +211,16 @@ export default function HomePage() {
                   </select>
                   <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-400">▼</span>
                 </div>
+                {selectedEvento && (
+                  <div className="mt-2 text-right">
+                    <a
+                      href={`/eventos/${selectedEvento}`}
+                      className="text-xs text-cyan-400 hover:text-cyan-300 font-medium inline-flex items-center gap-1 transition"
+                    >
+                      Ver sitio exclusivo de este evento →
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div>
