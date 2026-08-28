@@ -97,13 +97,17 @@ function SuccessContent() {
 
   if (error || !data) {
     return (
-      <div className="text-center py-20">
-        <div className="text-5xl mb-4">⚠️</div>
-        <h2 className="text-xl font-bold text-white mb-2">Hubo un problema</h2>
-        <p className="text-red-400">{error}</p>
+      <div className="max-w-md mx-auto text-center py-16 px-4 space-y-6">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <span className="text-3xl">⚠️</span>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white mb-2">No se encontró la orden</h2>
+          <p className="text-sm text-slate-300">{error}</p>
+        </div>
         <button
           onClick={() => router.push("/")}
-          className="mt-6 rounded-xl border border-white/10 bg-[#111823] px-6 py-2 text-sm text-white hover:bg-white/5"
+          className="w-full rounded-xl border border-white/15 bg-[#111823] px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
         >
           Volver al inicio
         </button>
@@ -111,35 +115,78 @@ function SuccessContent() {
     );
   }
 
+  const fechaEventoFormateada = data.evento?.fecha_evento
+    ? new Date(data.evento.fecha_evento).toLocaleDateString("es-MX", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "";
+
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-6">
-        <div className="text-6xl mb-3">🎉</div>
-        <h2 className="text-2xl font-bold text-white">¡Compra exitosa!</h2>
-        <p className="text-slate-400 mt-1">
+    <div className="max-w-3xl mx-auto space-y-8">
+      {/* Header Result */}
+      <div className="text-center space-y-3">
+        <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-emerald-400/10 text-emerald-400 border border-emerald-400/20 mb-2">
+          <span className="text-3xl">🎉</span>
+        </div>
+        <h2 className="text-3xl font-extrabold text-white tracking-tight">¡Compra Confirmada!</h2>
+        <p className="text-sm text-slate-300 max-w-md mx-auto">
           {data.payment_status === "paid" 
-            ? `Se han generado ${data.tickets.length} boletos digitales` 
+            ? `Se ${data.tickets.length === 1 ? "ha generado 1 boleto digital" : `han generado ${data.tickets.length} boletos digitales`} listos para tu evento.` 
             : "El pago se está procesando. Actualiza la página en unos momentos."}
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Resumen del Evento */}
+      {data.evento && (
+        <div className="rounded-2xl border border-cyan-400/20 bg-[#111823]/90 p-5 backdrop-blur-xl shadow-[0_0_30px_rgba(34,211,238,0.1)] flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase font-bold tracking-widest text-cyan-400">Evento Reservado</p>
+            <h3 className="text-lg font-bold text-white mt-0.5">{data.evento.nombre}</h3>
+            {fechaEventoFormateada && (
+              <p className="text-xs text-slate-300 capitalize mt-1">📅 {fechaEventoFormateada}</p>
+            )}
+          </div>
+          <div className="text-right sm:border-l sm:border-white/10 sm:pl-5 w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end">
+            <span className="text-[10px] uppercase tracking-wider text-slate-400">Folio Orden</span>
+            <span className="text-xs font-mono font-bold text-white bg-black/40 px-2.5 py-1 rounded-md border border-white/10">
+              {data.order.id ? (data.order.id as string).slice(0, 8).toUpperCase() : "QPASS"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Grid o Lista centrada de Boletos */}
+      <div className="flex flex-col items-center gap-6">
         {data.tickets.map((ticket, index) => (
-          <div key={ticket.id} className="rounded-2xl border border-white/10 bg-[#111823]/80 p-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-white p-2 rounded-xl">
-                <QRCodeSVG value={ticket.qr_token || ticket.id} size={80} />
+          <div 
+            key={ticket.id} 
+            className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#111823] p-6 shadow-2xl backdrop-blur-xl space-y-5"
+          >
+            <div className="flex flex-col sm:flex-row items-center gap-5">
+              {/* QR Container */}
+              <div className="bg-white p-3 rounded-2xl border border-cyan-400/30 shadow-[0_0_20px_rgba(34,211,238,0.2)] shrink-0">
+                <QRCodeSVG value={ticket.qr_token || ticket.id} size={130} />
               </div>
-              <div className="flex-1">
-                <p className="text-xs text-slate-500">Asistente {index + 1}</p>
-                <p className="text-sm font-semibold text-white">{ticket.nombre_comprador}</p>
-                <p className="text-xs text-slate-400">{ticket.email_comprador}</p>
-                <p className="text-[10px] font-mono text-slate-500 mt-1">ID: {ticket.id.slice(0, 8)}...</p>
+
+              {/* Informes del Asistente */}
+              <div className="flex-1 text-center sm:text-left space-y-1">
+                <div className="inline-block rounded-full bg-cyan-400/10 border border-cyan-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cyan-300 mb-1">
+                  Asistente #{index + 1}
+                </div>
+                <p className="text-base font-bold text-white leading-snug">{ticket.nombre_comprador}</p>
+                <p className="text-xs text-slate-300 font-mono truncate">{ticket.email_comprador}</p>
+                <p className="text-[10px] font-mono text-slate-400 pt-1">
+                  ID Pase: <span className="text-slate-300">{ticket.id.slice(0, 8)}...{ticket.id.slice(-4)}</span>
+                </p>
               </div>
             </div>
+
             {/* Botón de descarga PDF individual */}
             {qrCodes[ticket.id] && data.payment_status === "paid" && (
-              <div className="mt-3">
+              <div className="pt-2 border-t border-white/10">
                 <PDFDownloadLink
                   document={
                     <TicketPDF 
@@ -149,15 +196,15 @@ function SuccessContent() {
                       asistente={{ nombreCompleto: ticket.nombre_comprador, email: ticket.email_comprador }} 
                     />
                   }
-                  fileName={`qpass-${ticket.nombre_comprador.replace(/\s/g, '-')}.pdf`}
+                  fileName={`qpass-boleto-${ticket.nombre_comprador.replace(/\s+/g, '-')}.pdf`}
                   className="w-full"
                 >
                   {({ loading: pdfLoading }) => (
                     <button
                       disabled={pdfLoading}
-                      className="w-full rounded-lg bg-cyan-500/20 border border-cyan-400/30 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/30"
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-4 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(34,211,238,0.3)] transition hover:from-cyan-600 hover:to-cyan-700 disabled:opacity-50"
                     >
-                      {pdfLoading ? "Generando PDF..." : "📄 Descargar boleto"}
+                      {pdfLoading ? "Generando PDF..." : "📄 Descargar Boleto PDF (1 página)"}
                     </button>
                   )}
                 </PDFDownloadLink>
@@ -167,21 +214,21 @@ function SuccessContent() {
         ))}
       </div>
 
-      <div className="mt-6 text-center flex gap-3 justify-center">
+      {/* Botones de acción inferiores */}
+      <div className="pt-4 flex flex-col sm:flex-row gap-4 justify-center items-center">
         <button
-          onClick={() => router.push("/")}
-          className="rounded-xl border border-white/10 bg-[#111823] px-6 py-2 text-sm text-white hover:bg-white/5"
+          onClick={() => router.push("/boletos")}
+          className="w-full sm:w-auto rounded-xl border border-white/15 bg-[#111823] px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition"
         >
-          Comprar más boletos
+          Ver más eventos
         </button>
-        {data.payment_status === "paid" && (
+        {data.payment_status === "paid" && data.tickets.length > 1 && (
           <button
             onClick={() => {
-              // Descargar todos los PDFs iterando sobre los links
               const links = document.querySelectorAll('a[download]');
               links.forEach((link) => (link as HTMLAnchorElement).click());
             }}
-            className="rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-6 py-2 text-sm text-white hover:from-cyan-600 hover:to-cyan-700"
+            className="w-full sm:w-auto rounded-xl bg-cyan-500/20 border border-cyan-400/30 px-6 py-3 text-sm font-bold text-cyan-300 hover:bg-cyan-500/30 transition"
           >
             Descargar todos los boletos
           </button>
@@ -193,27 +240,27 @@ function SuccessContent() {
 
 export default function SuccessPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0f14] via-[#0d1219] to-[#0a0f14]">
-      <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 md:py-12">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300 mb-4">
-            Pago Completado
+    <div className="min-h-screen bg-[#0a0f14] text-white selection:bg-cyan-500 selection:text-black py-10">
+      <div className="mx-auto max-w-5xl px-4">
+        {/* Top Branding Header */}
+        <div className="mb-8 text-center space-y-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-emerald-300">
+            ✓ Pago y Registro Exitoso
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">Q-Pass Tickets</h1>
+          <h1 className="text-2xl font-extrabold tracking-widest text-white uppercase">Q-PASS TICKETS</h1>
         </div>
 
         <Suspense fallback={
           <div className="flex justify-center py-20">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-cyan-400/30 border-t-cyan-400" />
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400/30 border-t-cyan-400" />
           </div>
         }>
           <SuccessContent />
         </Suspense>
 
         {/* Footer */}
-        <div className="mt-12 pt-6 text-center border-t border-white/10">
-          <p className="text-[10px] uppercase tracking-wider text-slate-600">LIZARD TECH • Q-PASS DIGITAL ACCESS</p>
+        <div className="mt-16 pt-6 text-center border-t border-white/10 text-xs text-slate-500">
+          LIZARD TECH • Q-PASS DIGITAL ACCESS
         </div>
       </div>
     </div>
