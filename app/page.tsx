@@ -388,17 +388,22 @@ export default function LandingPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Aforo Estimado del Evento</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Boletos Digitales a Emitir (Aforo Estimado)
+                </label>
                 <select
                   value={formLead.aforoEstimado}
                   onChange={(e) => setFormLead({ ...formLead, aforoEstimado: e.target.value })}
                   className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400"
                 >
-                  <option value="50-200">50 a 200 personas</option>
-                  <option value="200-500">200 a 500 personas</option>
-                  <option value="500-1500">500 a 1,500 personas</option>
-                  <option value="1500+">Más de 1,500 personas</option>
+                  <option value="50-200">50 a 200 boletos digitales</option>
+                  <option value="200-500">200 a 500 boletos digitales</option>
+                  <option value="500-1500">500 a 1,500 boletos digitales</option>
+                  <option value="1500+">Más de 1,500 boletos digitales</option>
                 </select>
+                <p className="text-[11px] text-slate-400 mt-2 bg-white/5 border border-white/10 rounded-xl p-2.5 leading-relaxed">
+                  ℹ️ <span className="text-slate-300 font-semibold">Nota de servicio:</span> Q-Pass provee exclusivamente la infraestructura tecnológica de software para la venta en línea, generación de pases digitales con QR y escaneo en puerta. La sede, logística y gestión del público corren por cuenta del organizador.
+                </p>
               </div>
 
               <button
