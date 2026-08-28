@@ -79,10 +79,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── LLAMADA ATÓMICA AL RPC ──
+    // ── LLAMADA ATÓMICA AL RPC CON FALLBACK DIRECTO ──
     const esGratuito = totalEsperado === 0;
     const statusInicial = (esGratuito || stripeKey === 'simulated') ? 'paid' : 'pending';
     
+    let orderId: string;
+
     const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('process_ticket_purchase', {
       p_evento_id: rawEventoId,
       p_asistentes: rawAsistentes,
@@ -90,14 +92,54 @@ export async function POST(req: Request) {
       p_payment_status: statusInicial
     });
 
-    if (rpcError || !rpcResult.success) {
-      return NextResponse.json(
-        { success: false, error: rpcResult?.error || rpcError?.message || 'Error al procesar la reserva' },
-        { status: 400 }
-      );
-    }
+    if (!rpcError && rpcResult?.success && rpcResult?.order_id) {
+      orderId = rpcResult.order_id;
+    } else {
+      // Si la función RPC no ha sido creada aún en el SQL Editor de Supabase, usar inserción directa
+      if (rpcError?.message?.includes("Could not find the function") || rpcError?.code === "PGRST202") {
+        console.warn("RPC process_ticket_purchase no encontrada en Supabase. Usando inserción directa de respaldo.");
+        
+        // 1. Crear Orden
+        const { data: nuevaOrden, error: errOrden } = await supabaseAdmin
+          .from('orders')
+          .insert([{
+            email_comprador: emailComprador || rawAsistentes[0].email,
+            total_amount: totalEsperado,
+            payment_status: statusInicial,
+          }])
+          .select('id')
+          .single();
 
-    const orderId = rpcResult.order_id;
+        if (errOrden || !nuevaOrden) {
+          throw new Error(errOrden?.message || 'Error al crear la orden');
+        }
+
+        orderId = nuevaOrden.id;
+
+        // 2. Crear Boletos
+        const boletosPayload = rawAsistentes.map((ast: { nombreCompleto: string; email: string }) => ({
+          evento_id: rawEventoId,
+          order_id: orderId,
+          email_comprador: ast.email,
+          nombre_comprador: ast.nombreCompleto,
+          precio_unitario: evento.precio,
+          estado: statusInicial,
+        }));
+
+        const { error: errBoletos } = await supabaseAdmin
+          .from('boletos')
+          .insert(boletosPayload);
+
+        if (errBoletos) {
+          throw new Error(errBoletos.message || 'Error al crear boletos');
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, error: rpcResult?.error || rpcError?.message || 'Error al procesar la reserva' },
+          { status: 400 }
+        );
+      }
+    }
 
     // ── BOLETOS GRATUITOS O MODO SIMULACIÓN ──
     if (esGratuito || stripeKey === 'simulated') {
