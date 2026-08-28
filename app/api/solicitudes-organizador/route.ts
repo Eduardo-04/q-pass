@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
     const supabaseAdmin = createAdminClient();
 
-    // Intentar guardar en la tabla solicitudes_organizador (si existe)
+    // 1. Intentar guardar en la tabla dedicada solicitudes_organizador
     const { error: errInsert } = await supabaseAdmin
       .from('solicitudes_organizador')
       .insert([
@@ -30,22 +30,30 @@ export async function POST(req: Request) {
         }
       ]);
 
+    // 2. Si la tabla no existe aún, hacer fallback seguro insertando un perfil de cliente borrador
     if (errInsert) {
-      console.warn("Tabla solicitudes_organizador no existe aún o dio error. Guardando en consola:", errInsert.message);
+      console.warn("Tabla solicitudes_organizador no encontrada. Usando respaldo en perfiles_cliente:", errInsert.message);
+      
+      const dummyId = crypto.randomUUID();
+      await supabaseAdmin.from('perfiles_cliente').insert([{
+        user_id: dummyId,
+        nombre_empresa: `📌 SOLICITUD: ${nombreEmpresa} (${nombreContacto} - Tel: ${telefono})`,
+        comision_porcentaje: 10,
+        comision_fija: 0
+      }]);
     }
 
-    // Armar mensaje pre-construido de WhatsApp
-    const mensajeWA = encodeURIComponent(
-      `Hola Q-Pass 👋, solicito alta como Organizador para mi evento.\n\n` +
-      `🏢 *Empresa/Evento:* ${nombreEmpresa}\n` +
-      `👤 *Contacto:* ${nombreContacto}\n` +
-      `✉️ *Email:* ${email}\n` +
-      `📞 *Teléfono:* ${telefono}\n` +
-      `🎟️ *Aforo Estimado:* ${aforoEstimado || '100-500'}`
-    );
+    // 3. Armar mensaje limpio sin caracteres ni codificación extraña para WhatsApp
+    const mensajeLimpio = 
+      `Hola Q-Pass! Solicito alta como Organizador para mi evento.\n\n` +
+      `*Empresa / Evento:* ${nombreEmpresa}\n` +
+      `*Contacto:* ${nombreContacto}\n` +
+      `*Email:* ${email}\n` +
+      `*Teléfono:* ${telefono}\n` +
+      `*Aforo Estimado:* ${aforoEstimado || '100-500'}`;
 
     const whatsappPhone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '529665939118';
-    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${mensajeWA}`;
+    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(mensajeLimpio)}`;
 
     return NextResponse.json({
       success: true,
