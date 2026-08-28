@@ -85,12 +85,38 @@ export default function AdminPortal() {
 
     setEventos((data ?? []) as Evento[]);
 
-    // Si es Master, cargar todos los perfiles de clientes
+    // Si es Master, cargar todos los usuarios organizadores/socios desde perfiles
     if (isMaster) {
-      const { data: profiles } = await supabase
+      const { data: allUsers } = await supabase
+        .from("perfiles")
+        .select("id, email, rol, nombre");
+
+      const { data: existingProfiles } = await supabase
         .from("perfiles_cliente")
         .select("*");
-      setPerfiles(profiles || []);
+
+      const profilesMap = new Map((existingProfiles || []).map(p => [p.user_id, p]));
+
+      // Auto-crear entrada de perfil cliente para cada usuario que no la tenga
+      const finalProfiles: PerfilCliente[] = [];
+      for (const u of (allUsers || [])) {
+        if (u.rol === "master" || u.rol === "organizador") {
+          let prof = profilesMap.get(u.id);
+          if (!prof) {
+            prof = {
+              user_id: u.id,
+              comision_porcentaje: 10,
+              comision_fija: 0,
+              nombre_empresa: u.nombre || u.email?.split('@')[0] || 'Socio Q-Pass'
+            };
+            // Intentar persistir silenciosamente
+            await supabase.from("perfiles_cliente").upsert(prof);
+          }
+          finalProfiles.push(prof);
+        }
+      }
+
+      setPerfiles(finalProfiles);
     }
   }, [currentUser, isMaster, editingId]);
 
