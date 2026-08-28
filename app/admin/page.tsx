@@ -97,7 +97,12 @@ export default function AdminPortal() {
     // Si es Master, cargar todos los socios y solicitudes desde la API Admin (bypass RLS)
     if (isMaster) {
       try {
-        const resSocios = await fetch("/api/admin/socios");
+        const { data: { session } } = await supabase.auth.getSession();
+        const resSocios = await fetch("/api/admin/socios", {
+          headers: {
+            "Authorization": `Bearer ${session?.access_token || ""}`
+          }
+        });
         const dataSocios = await resSocios.json();
         if (dataSocios.success) {
           setPerfiles(dataSocios.perfiles || []);
