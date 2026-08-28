@@ -119,13 +119,27 @@ export default function HomePage() {
     setLoading(true);
     setMensaje(null);
 
+    const mainEmail = asistentes[0]?.email?.trim() || "";
+    if (!mainEmail || !mainEmail.includes("@")) {
+      showMessage("Ingresa un correo electrónico válido para el comprador principal.", "error");
+      setLoading(false);
+      return;
+    }
+
+    const asistentesNormalizados = asistentes.map((ast, i) => ({
+      id: ast.id,
+      nombreCompleto: ast.nombreCompleto.trim() || `Asistente ${i + 1}`,
+      email: i === 0 ? mainEmail : (ast.email?.trim() || mainEmail)
+    }));
+
     try {
       const res = await fetch("/api/checkout-multiple", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          eventoId: selectedEvento,
-          asistentes: asistentes,
+          evento_id: selectedEvento,
+          asistentes: asistentesNormalizados,
+          email_comprador: mainEmail,
           total: asistentes.length * (eventoActual?.precio || 0)
         }),
       });
@@ -244,7 +258,7 @@ export default function HomePage() {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">Datos de los asistentes</label>
                 {asistentes.map((asistente, index) => (
                   <div key={asistente.id} className="rounded-xl border border-white/15 bg-[#0a0f14] p-4 space-y-3 shadow-inner">
-                    <p className="text-sm font-bold text-cyan-300">Asistente {index + 1}</p>
+                    <p className="text-sm font-bold text-cyan-300">Asistente {index + 1} {index === 0 ? "(Comprador Principal)" : ""}</p>
                     <input
                       type="text"
                       placeholder="Nombre completo (ej: Juan Pérez)"
@@ -252,13 +266,20 @@ export default function HomePage() {
                       value={asistente.nombreCompleto}
                       onChange={(e) => updateAsistente(index, "nombreCompleto", e.target.value)}
                     />
-                    <input
-                      type="email"
-                      placeholder="Correo electrónico (ej: juan@ejemplo.com)"
-                      className="w-full rounded-lg border border-white/15 bg-[#111823] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 focus:outline-none transition"
-                      value={asistente.email}
-                      onChange={(e) => updateAsistente(index, "email", e.target.value)}
-                    />
+                    {index === 0 ? (
+                      <div>
+                        <input
+                          type="email"
+                          placeholder="Correo electrónico (ej: juan@ejemplo.com)"
+                          className="w-full rounded-lg border border-white/15 bg-[#111823] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 focus:outline-none transition"
+                          value={asistente.email}
+                          onChange={(e) => updateAsistente(index, "email", e.target.value)}
+                        />
+                        <p className="text-[10px] text-cyan-400/80 mt-1">
+                          📬 Todos los boletos se enviarán juntos a este correo.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
