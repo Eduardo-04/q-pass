@@ -24,7 +24,7 @@ interface Ticket {
 function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const sessionId = searchParams.get("session_id");
+  const sessionId = searchParams.get("session_id") || searchParams.get("order_id");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

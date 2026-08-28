@@ -13,15 +13,20 @@ export async function GET(
     const { id } = await params;
     const supabaseAdmin = createAdminClient();
 
-    // MODO SIMULACIÓN
-    if (id.startsWith('sim_')) {
-      const parts = id.split('_');
-      const orderId = parts[1];
-      const eventoId = parts[2];
+    // MODO SIMULACIÓN O BÚSQUEDA DIRECTA POR ORDER_ID
+    if (id.startsWith('sim_') || !id.startsWith('cs_')) {
+      let orderId = id;
+      let eventoIdFromSim: string | null = null;
 
-      if (!orderId || !eventoId) {
+      if (id.startsWith('sim_')) {
+        const parts = id.split('_');
+        orderId = parts[1];
+        eventoIdFromSim = parts[2] || null;
+      }
+
+      if (!orderId) {
         return NextResponse.json(
-          { success: false, error: 'Session ID inválido' },
+          { success: false, error: 'Identificador de orden inválido' },
           { status: 400 }
         );
       }
@@ -41,14 +46,20 @@ export async function GET(
 
       const { data: tickets } = await supabaseAdmin
         .from('boletos')
-        .select('id, nombre_comprador, email_comprador, estado')
+        .select('id, nombre_comprador, email_comprador, estado, evento_id')
         .eq('order_id', orderId);
 
-      const { data: evento } = await supabaseAdmin
-        .from('eventos')
-        .select('id, nombre, fecha_evento, precio')
-        .eq('id', eventoId)
-        .single();
+      const targetEventoId = eventoIdFromSim || (tickets && tickets[0]?.evento_id);
+
+      let eventoData = null;
+      if (targetEventoId) {
+        const { data: ev } = await supabaseAdmin
+          .from('eventos')
+          .select('id, nombre, fecha_evento, precio')
+          .eq('id', targetEventoId)
+          .single();
+        eventoData = ev;
+      }
 
       const ticketsWithQr = (tickets || []).map(t => ({
         ...t,
@@ -59,7 +70,7 @@ export async function GET(
         success: true,
         order,
         tickets: ticketsWithQr,
-        evento,
+        evento: eventoData,
         payment_status: 'paid'
       });
     }
