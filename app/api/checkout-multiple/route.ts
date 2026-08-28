@@ -116,7 +116,7 @@ export async function POST(req: Request) {
 
         orderId = nuevaOrden.id;
 
-        // 2. Crear Boletos
+        // 2. Crear Boletos (Usando columna fecha_compra oficial)
         const boletosPayload = rawAsistentes.map((ast: { nombreCompleto: string; email: string }) => ({
           evento_id: rawEventoId,
           order_id: orderId,
@@ -124,6 +124,7 @@ export async function POST(req: Request) {
           nombre_comprador: ast.nombreCompleto,
           precio_unitario: evento.precio,
           estado: statusInicial,
+          fecha_compra: new Date().toISOString()
         }));
 
         const { error: errBoletos } = await supabaseAdmin

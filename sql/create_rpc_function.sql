@@ -1,9 +1,9 @@
 -- ============================================================
--- Q-PASS: Función Atómica para Compra de Boletos
+-- Q-PASS: Función Atómica para Compra de Boletos (Actualizada)
 -- ============================================================
 -- Esta función garantiza que no haya sobreventa mediante el uso de:
 -- 1. SELECT ... FOR UPDATE: Bloquea la fila del evento.
--- 2. Conteo de boletos 'pending' recientes (15 min) como ocupados.
+-- 2. Conteo de boletos 'pending' recientes (15 min) usando fecha_compra.
 -- 3. Transacción única para Order + Boletos.
 -- ============================================================
 
@@ -30,14 +30,13 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Evento no encontrado');
   END IF;
 
-  -- 2. Contar boletos activos, usados Y PENDING recientes (últimos 15 min)
-  -- Nota: Asumimos que la tabla boletos tiene 'created_at' (estándar Supabase)
+  -- 2. Contar boletos activos, usados Y PENDING recientes (usando fecha_compra)
   SELECT COUNT(*) INTO v_vendidos
   FROM public.boletos
   WHERE evento_id = p_evento_id
   AND (
     estado IN ('activo', 'usado', 'paid')
-    OR (estado = 'pending' AND created_at > NOW() - INTERVAL '15 minutes')
+    OR (estado = 'pending' AND (fecha_compra > NOW() - INTERVAL '15 minutes' OR fecha_compra IS NULL))
   );
 
   -- 3. Verificar si hay espacio suficiente
@@ -71,7 +70,8 @@ BEGIN
       email_comprador, 
       nombre_comprador, 
       estado, 
-      precio_unitario
+      precio_unitario,
+      fecha_compra
     )
     VALUES (
       v_order_id,
@@ -79,7 +79,8 @@ BEGIN
       (v_asistente->>'email'),
       (v_asistente->>'nombreCompleto'),
       p_payment_status,
-      v_precio_unitario
+      v_precio_unitario,
+      NOW()
     );
   END LOOP;
 
