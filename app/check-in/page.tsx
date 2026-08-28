@@ -85,10 +85,8 @@ export default function CheckInPage() {
         }
       }
 
-      // Limpiar el resultado visual después de 5 segundos
-      setTimeout(() => {
-        setStatus(prev => prev === data ? null : prev);
-      }, 5000);
+      // Estado visual permanente hasta nuevo escaneo o clic manual
+      // (sin reseteo automático a los 5s para evitar distracciones del portero)
 
     } catch (err) {
       console.error("Error en la petición:", err);
@@ -300,6 +298,17 @@ export default function CheckInPage() {
                   )}
                 </div>
               )}
+
+              {/* Botón de reseteo rápido para el portero */}
+              <button
+                onClick={() => {
+                  setStatus(null);
+                  setLastScanned(null);
+                }}
+                className="mt-4 w-full rounded-xl bg-white/10 border border-white/20 py-2.5 text-xs font-bold uppercase tracking-wider text-white transition hover:bg-white/20 active:scale-95"
+              >
+                ✓ Siguiente Asistente (Limpiar)
+              </button>
             </div>
           </div>
         )}
