@@ -21,6 +21,41 @@ export default function CheckInPage() {
   const [scannerReady, setScannerReady] = useState(false);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
+  const playAudioFeedback = (success: boolean) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (success) {
+        // Tono agudo y rápido (880Hz -> 1046Hz) para éxito
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1046, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.25);
+      } else {
+        // Tono grave de alerta (220Hz -> 180Hz) para error o usado
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(220, ctx.currentTime);
+        osc.frequency.setValueAtTime(180, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.4, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.35);
+      }
+    } catch {
+      // Ignorar si el navegador bloquea audio sin interacción previa
+    }
+  };
+
   const processTicket = useCallback(async (ticketId: string) => {
     // Evitar escaneos duplicados en menos de 3 segundos
     if (isProcessing) return;
@@ -36,37 +71,34 @@ export default function CheckInPage() {
         headers: { 'Content-Type': 'application/json' }
       });
 
-      if (!res.ok) {
-        const errorMsg = `Error ${res.status}: No se pudo validar el ticket`;
-        setStatus({ success: false, message: errorMsg });
-        return;
-      }
-
       const data = await res.json();
       setStatus(data);
 
-      // Feedback visual con vibración si está disponible
+      // Reproducir sonido y vibración
+      playAudioFeedback(data.success);
+
       if ('vibrate' in navigator) {
         if (data.success) {
           navigator.vibrate(200);
         } else {
-          navigator.vibrate([100, 100, 100]);
+          navigator.vibrate([150, 100, 150]);
         }
       }
 
-      // Limpiar el estado después de 4 segundos
+      // Limpiar el resultado visual después de 5 segundos
       setTimeout(() => {
         setStatus(prev => prev === data ? null : prev);
-      }, 4000);
+      }, 5000);
 
     } catch (err) {
       console.error("Error en la petición:", err);
+      playAudioFeedback(false);
       setStatus({ 
         success: false, 
         message: "Error de conexión con el servidor. Intenta nuevamente." 
       });
     } finally {
-      setTimeout(() => setIsProcessing(false), 3000);
+      setTimeout(() => setIsProcessing(false), 2000);
     }
   }, [isProcessing, lastScanned]);
 
@@ -186,6 +218,36 @@ export default function CheckInPage() {
               <span>🎯 Apunta al código QR</span>
             </div>
           </div>
+        </div>
+
+        {/* Sección de Validación Manual por Código */}
+        <div className="mt-4 rounded-2xl border border-white/10 bg-[#111823]/60 p-4 backdrop-blur-md">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const inputEl = (e.currentTarget.elements.namedItem("manualInput") as HTMLInputElement);
+              const val = inputEl?.value?.trim();
+              if (val) {
+                processTicket(val);
+                inputEl.value = "";
+              }
+            }}
+            className="flex gap-2"
+          >
+            <input
+              name="manualInput"
+              type="text"
+              placeholder="Ingresar ID o código manualmente..."
+              className="flex-1 rounded-xl border border-white/15 bg-[#0a0f14] px-3.5 py-2.5 text-xs text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 font-mono"
+            />
+            <button
+              type="submit"
+              disabled={isProcessing}
+              className="rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-cyan-600 disabled:opacity-50 shrink-0"
+            >
+              Validar
+            </button>
+          </form>
         </div>
 
         {/* Resultado de validación */}

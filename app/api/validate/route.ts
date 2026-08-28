@@ -61,7 +61,12 @@ export async function POST(req: Request) {
     // ── 5. Revisar si ya fue usado ──
     if (ticket.estado === 'usado') {
       return NextResponse.json(
-        { success: false, message: "¡ALERTA! Este boleto ya fue validado anteriormente." },
+        { 
+          success: false, 
+          message: "¡ALERTA! Este boleto YA FUE USADO anteriormente para ingresar.",
+          email: ticket.email_comprador,
+          eventName: (ticket.eventos as { nombre?: string })?.nombre
+        },
         { status: 400 }
       );
     }
@@ -69,7 +74,12 @@ export async function POST(req: Request) {
     // ── 6. Verificar estado activo o pagado ──
     if (ticket.estado !== 'activo' && ticket.estado !== 'paid') {
       return NextResponse.json(
-        { success: false, message: `Boleto no válido. Estado actual: ${ticket.estado}` },
+        { 
+          success: false, 
+          message: `Boleto no válido. Estado actual: ${ticket.estado.toUpperCase()}`,
+          email: ticket.email_comprador,
+          eventName: (ticket.eventos as { nombre?: string })?.nombre
+        },
         { status: 400 }
       );
     }
@@ -86,7 +96,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Acceso Permitido",
+      message: "¡ACCESO CONCEDIDO! Boleto validado exitosamente.",
       email: ticket.email_comprador,
       ticketId: ticket.id,
       eventName: eventName || undefined,
