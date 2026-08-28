@@ -114,9 +114,15 @@ export async function POST(req: Request) {
     const { error: updateError } = await supabaseAdmin
       .from('boletos')
       .update({ estado: 'usado' })
-      .eq('id', realTicketId);
+      .eq('id', ticket.id);
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('Error al actualizar estado de boleto:', updateError);
+      return NextResponse.json(
+        { success: false, message: `Error al actualizar estado: ${updateError.message}` },
+        { status: 500 }
+      );
+    }
 
     const eventName = (ticket.eventos as { nombre?: string })?.nombre;
 
@@ -129,9 +135,10 @@ export async function POST(req: Request) {
     });
 
   } catch (err) {
-    console.error('Validate error:', err);
+    const errorMsg = err instanceof Error ? err.message : "Error desconocido en el servidor";
+    console.error('Validate error:', errorMsg, err);
     return NextResponse.json(
-      { success: false, message: "Error en el servidor" },
+      { success: false, message: `Error en el servidor: ${errorMsg}` },
       { status: 500 }
     );
   }
