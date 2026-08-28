@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "tsx --env-file=.env.local scripts/test_flow.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
