@@ -35,12 +35,38 @@ export async function POST(req: Request) {
     const realTicketId = qrValidation.ticketId;
     const supabaseAdmin = createAdminClient();
 
-    // ── 3. Buscar el boleto con información del evento ──
-    const { data: ticket, error } = await supabaseAdmin
-      .from('boletos')
-      .select('*, eventos(id, nombre, organizador_id)')
-      .eq('id', realTicketId)
-      .single();
+    // ── 3. Buscar el boleto con información del evento (Soporta UUID o Prefijo/Folio) ──
+    const isFullUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(realTicketId);
+
+    let ticket = null;
+    let error = null;
+
+    if (isFullUUID) {
+      const res = await supabaseAdmin
+        .from('boletos')
+        .select('*, eventos(id, nombre, organizador_id)')
+        .eq('id', realTicketId)
+        .single();
+      ticket = res.data;
+      error = res.error;
+    } else {
+      // Buscar por prefijo si el usuario digitó solo los primeros caracteres en puerta
+      const res = await supabaseAdmin
+        .from('boletos')
+        .select('*, eventos(id, nombre, organizador_id)')
+        .ilike('id', `${realTicketId}%`);
+      
+      if (res.data && res.data.length === 1) {
+        ticket = res.data[0];
+      } else if (res.data && res.data.length > 1) {
+        return NextResponse.json(
+          { success: false, message: "El código ingresado coincide con múltiples boletos. Por favor ingresa el ID completo." },
+          { status: 400 }
+        );
+      } else {
+        error = res.error;
+      }
+    }
 
     if (error || !ticket) {
       return NextResponse.json(

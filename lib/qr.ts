@@ -19,8 +19,8 @@ export function generateSignedQRToken(ticketId: string): string {
 }
 
 /**
- * Valida un token de QR escaneado.
- * Retorna el ticketId si la firma es válida o si coincide con formato UUID legacy.
+ * Valida un token de QR escaneado o un código/folio digitado manualmente en puerta.
+ * Retorna el ticketId si la firma es válida, si es un UUID completo o un prefijo válido.
  */
 export function verifyAndExtractTicketId(token: string): { valid: boolean; ticketId: string | null; reason?: string } {
   if (!token || typeof token !== 'string') {
@@ -50,9 +50,9 @@ export function verifyAndExtractTicketId(token: string): { valid: boolean; ticke
     return { valid: true, ticketId };
   }
 
-  // Caso B: Legacy UUID (soporte retrocompatible)
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (uuidRegex.test(cleanToken)) {
+  // Caso B: UUID completo o Folio / Prefijo manual (e.g. 75f9ea34 o UUID completo)
+  const hexOrUuidRegex = /^[0-9a-f\-]{4,36}$/i;
+  if (hexOrUuidRegex.test(cleanToken)) {
     return { valid: true, ticketId: cleanToken };
   }
 

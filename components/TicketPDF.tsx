@@ -224,8 +224,8 @@ export const TicketPDF = ({ ticketData, evento, qrCodeBase64, asistente }: {
 
             <View style={pdfStyles.infoGrid}>
               <View style={pdfStyles.infoCard}>
-                <Text style={pdfStyles.infoLabel}>ID del boleto</Text>
-                <Text style={pdfStyles.infoValue}>{ticketData?.id?.slice(0, 8)}...{ticketData?.id?.slice(-4)}</Text>
+                <Text style={pdfStyles.infoLabel}>ID del boleto (Manual)</Text>
+                <Text style={pdfStyles.infoValue}>{ticketData?.id}</Text>
               </View>
               <View style={pdfStyles.infoCard}>
                 <Text style={pdfStyles.infoLabel}>Asistente</Text>
