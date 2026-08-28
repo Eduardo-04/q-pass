@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     // Permitir acceso si es gerenteprueba@gmail.com o si tiene rol 'master' en perfiles
     let isMasterUser = userEmail === 'gerenteprueba@gmail.com';
     if (userId && !isMasterUser) {
-      const { data: perfil } = await supabaseAdmin.from('perfiles').select('rol').eq('id', userId).single();
+      const { data: perfil } = await supabaseAdmin.from('perfiles').select('rol').eq('id', userId).maybeSingle();
       if (perfil?.rol === 'master') isMasterUser = true;
     }
 

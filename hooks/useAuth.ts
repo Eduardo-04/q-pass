@@ -46,7 +46,7 @@ export function useAuth(): AuthState {
         .from('perfiles')
         .select('rol')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       let assignedRole: UserRole = (perfil?.rol as UserRole) || 'staff'
       if (!perfil?.rol || perfil.rol === 'staff' || user.email === 'gerenteprueba@gmail.com') {

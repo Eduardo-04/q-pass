@@ -52,7 +52,7 @@ export async function getUserRole(userId: string): Promise<UserRole> {
     .from('perfiles')
     .select('rol')
     .eq('id', userId)
-    .single()
+    .maybeSingle()
 
   if (data?.rol && data.rol !== 'staff') {
     return data.rol as UserRole

@@ -61,7 +61,7 @@ export default function AdminPortal() {
       .from("perfiles_cliente")
       .select("*")
       .eq("user_id", currentUser.id)
-      .single();
+      .maybeSingle();
     
     if (profile) {
       setUserProfile(profile);
