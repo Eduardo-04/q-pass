@@ -50,21 +50,21 @@ export async function POST(req: Request) {
       ticket = res.data;
       error = res.error;
     } else {
-      // Buscar por prefijo si el usuario digitó solo los primeros caracteres en puerta
+      // Buscar por prefijo de 8 caracteres sin provocar errores de operador Postgres UUID
       const res = await supabaseAdmin
         .from('boletos')
-        .select('*, eventos(id, nombre, organizador_id)')
-        .ilike('id', `${realTicketId}%`);
+        .select('*, eventos(id, nombre, organizador_id)');
       
-      if (res.data && res.data.length === 1) {
-        ticket = res.data[0];
-      } else if (res.data && res.data.length > 1) {
+      const matches = (res.data || []).filter(b => b.id.toLowerCase().startsWith(realTicketId.toLowerCase()));
+      if (matches.length === 1) {
+        ticket = matches[0];
+      } else if (matches.length > 1) {
         return NextResponse.json(
           { success: false, message: "El código ingresado coincide con múltiples boletos. Por favor ingresa el ID completo." },
           { status: 400 }
         );
       } else {
-        error = res.error;
+        error = { message: "Boleto no encontrado por folio" };
       }
     }
 

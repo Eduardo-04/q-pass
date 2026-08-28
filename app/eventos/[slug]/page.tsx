@@ -119,29 +119,34 @@ export default function EventoDetallePage({ params }: EventoPageProps) {
     e.preventDefault();
     if (!evento) return;
 
-    // Validar datos de asistentes
-    for (let i = 0; i < asistentes.length; i++) {
-      if (!asistentes[i].nombreCompleto.trim()) {
-        toast.error(`Ingresa el nombre completo del asistente ${i + 1}`);
-        return;
-      }
-      if (!asistentes[i].email.trim() || !asistentes[i].email.includes("@")) {
-        toast.error(`Ingresa un correo electrónico válido para el asistente ${i + 1}`);
-        return;
-      }
+    // Validar datos del comprador principal y asistentes
+    const mainEmail = asistentes[0]?.email?.trim() || "";
+    if (!mainEmail || !mainEmail.includes("@")) {
+      toast.error("Ingresa un correo electrónico válido para el comprador principal");
+      return;
     }
+
+    const asistentesNormalizados = asistentes.map((ast, i) => {
+      if (!ast.nombreCompleto.trim()) {
+        toast.error(`Ingresa el nombre completo del asistente ${i + 1}`);
+        throw new Error(`Ingresa el nombre completo del asistente ${i + 1}`);
+      }
+      return {
+        id: ast.id,
+        nombreCompleto: ast.nombreCompleto.trim(),
+        email: i === 0 ? mainEmail : (ast.email?.trim() || mainEmail)
+      };
+    });
 
     setProcesando(true);
     try {
-      const emailComprador = asistentes[0].email.trim();
-
       const response = await fetch("/api/checkout-multiple", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           evento_id: evento.id,
-          asistentes,
-          email_comprador: emailComprador
+          asistentes: asistentesNormalizados,
+          email_comprador: mainEmail
         })
       });
 
@@ -411,7 +416,7 @@ export default function EventoDetallePage({ params }: EventoPageProps) {
                     {asistentes.map((asistente, index) => (
                       <div key={asistente.id} className="rounded-xl border border-white/15 bg-[#0a0f14] p-4 space-y-3 shadow-inner">
                         <p className="text-xs font-bold text-cyan-300 uppercase tracking-wider">
-                          Asistente #{index + 1} {index === 0 && "(Comprador Principal)"}
+                          Asistente #{index + 1} {index === 0 ? "(Comprador Principal)" : ""}
                         </p>
                         <div>
                           <input
@@ -423,16 +428,21 @@ export default function EventoDetallePage({ params }: EventoPageProps) {
                             required
                           />
                         </div>
-                        <div>
-                          <input
-                            type="email"
-                            placeholder="Correo Electrónico *"
-                            className="w-full rounded-lg border border-white/15 bg-[#111823] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
-                            value={asistente.email}
-                            onChange={(e) => updateAsistente(index, "email", e.target.value)}
-                            required
-                          />
-                        </div>
+                        {index === 0 ? (
+                          <div>
+                            <input
+                              type="email"
+                              placeholder="Correo Electrónico *"
+                              className="w-full rounded-lg border border-white/15 bg-[#111823] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                              value={asistente.email}
+                              onChange={(e) => updateAsistente(index, "email", e.target.value)}
+                              required
+                            />
+                            <p className="text-[10px] text-cyan-400/80 mt-1">
+                              📬 Todos los boletos de esta compra se enviarán juntos a este correo.
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
