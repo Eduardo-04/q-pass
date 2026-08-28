@@ -21,22 +21,25 @@ Transformar **Q-Pass** en una solución ligera, veloz y robusta para la venta y 
 - **Aislamiento entre Organizadores**: Bloqueo estricto en `/api/validate` para evitar que un organizador escanee boletos de otro evento.
 - **Documentación de Seguridad**: Creación del archivo `docs/SECURITY.md`.
 
-### 🔄 Fase C: Flujo Esencial y Experiencia Pública (PRÓXIMA)
-- Desarrollo de la página pública del evento `/eventos/[slug]` con información del organizador, mapa y selector directo.
-- Mejoras UX en el formulario de datos de asistentes.
+### ✅ Fase C: Flujo Esencial y Experiencia Pública (COMPLETADA)
+- Desarrollo completo de la página pública del detalle del evento (`/eventos/[slug]`).
+- Selector dinámico de cantidad de boletos y formulario expansible para capturar asistentes múltiples.
+- Confirmación instantánea para boletos de $0 MXN y redirección a pasarela/simulación para boletos de pago.
+- Diseño visual alineado con la identidad de marca (dark mode `#0a0f14`, degradados cian neón y cristal).
 
-### ⏳ Fase D: Validación Avanzada y Scanner Móvil
-- Historial local de escaneos y métricas rápidas de puerta en `/check-in`.
-- Retroalimentación sonora en navegadores móviles compatibles.
+### ✅ Fase D: Validación Avanzada y Scanner Móvil (COMPLETADA)
+- **Retroalimentación Acústica (Web Audio API)**: Tonos sintéticos agudos (éxito) y tonos graves de alerta (error / duplicado) en navegadores móviles sin depender de archivos de audio externos.
+- **Validación Manual por Código**: Caja de entrada rápida en `/check-in` para digitar IDs o tokens en caso de pantallas móviles rotas o sucias.
+- **Detección Atómica de Re-uso**: Identificación explícita cuando un boleto ya fue usado.
 
-### ⏳ Fase E: Notificaciones y Emails
+### ⏳ Fase E: Notificaciones y Emails (PRÓXIMA)
 - Integración de servicio transaccional (Resend / SendGrid) para envío automático del pase PDF adjunto por correo.
 
 ---
 
-## 📋 Lista de Trabajo Pendiente Priorizado
+## 📋 Lista de Trabajo Pendiente Priorizado (Backlog)
 
-1. **Página pública de evento (`/eventos/[slug]`)** — Alta.
-2. **Envío automático de email transaccional con PDF** — Media.
+1. **Poster/Portada del Evento (`imagen_url`)**: Permitir subida/URL de banner promocional en la página del evento `/eventos/[slug]`.
+2. **Envío automático de email transaccional con PDF** — Alta.
 3. **Múltiples zonas/tipos de boletos por evento (VIP, General)** — Media.
 4. **Filtro de checadores asignados a eventos específicos en DB** — Media.
