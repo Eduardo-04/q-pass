@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import Image from 'next/image';
+import { useAuth } from '@/hooks/useAuth';
 
 type ValidationStatus = {
   success: boolean;
@@ -12,6 +14,7 @@ type ValidationStatus = {
 };
 
 export default function CheckInPage() {
+  const { user: currentUser, isOrganizador, signOut } = useAuth();
   const [status, setStatus] = useState<ValidationStatus | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
@@ -77,7 +80,6 @@ export default function CheckInPage() {
             qrbox: { width: 280, height: 280 },
             aspectRatio: 1.0,
             showTorchButtonIfSupported: true,
-            hideZoomButtonIfSupported: false,
           },
           false
         );
@@ -86,9 +88,10 @@ export default function CheckInPage() {
           processTicket(decodedText);
         };
 
-        const onScanError = (error: any) => {
+        const onScanError = (error: unknown) => {
           // Silencioso - no llenar consola
-          if (error?.name !== 'NotFoundException') {
+          const errObj = error as { name?: string };
+          if (errObj?.name !== 'NotFoundException') {
             console.debug("Scanner error:", error);
           }
         };
@@ -119,34 +122,39 @@ export default function CheckInPage() {
     <div className="min-h-screen bg-gradient-to-b from-[#0a0f14] to-[#06090c]">
       <div className="mx-auto max-w-lg px-4 py-6 md:px-6 md:py-10">
         {/* Header simplificado */}
-        <div className="mb-6 text-center">
+        <div className="mb-6 text-center flex flex-col items-center">
+          <div className="mb-4">
+            <Image 
+              src="/q-pass-logo.png" 
+              alt="Q-Pass Logo" 
+              width={100} 
+              height={100} 
+              priority
+              className="drop-shadow-[0_0_15px_rgba(34,211,238,0.3)]"
+            />
+          </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-300 mb-4">
             <div className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
             Sistema de Acceso
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
-            Validador Q-Pass
-          </h1>
           <p className="mt-1 text-sm text-slate-400">
             Escanea el código QR del boleto
           </p>
         </div>
 
         {/* Scanner Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#111823]/50 shadow-xl">
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#111823]/80 shadow-2xl backdrop-blur-md">
           {/* Header del scanner */}
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 bg-[#0a0f14]/60">
             <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${scannerReady ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-              <span className="text-xs font-medium text-slate-400">
-                {scannerReady ? 'Cámara activa' : 'Iniciando...'}
+              <div className={`h-2.5 w-2.5 rounded-full ${scannerReady ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+              <span className="text-xs font-semibold text-slate-300">
+                {scannerReady ? 'Cámara Activa' : 'Iniciando cámara...'}
               </span>
             </div>
-            <div className="flex gap-2">
-              <span className="text-[10px] text-slate-500">
-                QR Code
-              </span>
-            </div>
+            <span className="text-xs font-mono font-medium text-cyan-400">
+              Escáner Q-Pass
+            </span>
           </div>
 
           {/* Contenedor del scanner */}
@@ -158,12 +166,12 @@ export default function CheckInPage() {
             
             {/* Overlay de procesamiento */}
             {isProcessing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
-                <div className="text-center">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/75 backdrop-blur-sm transition-all duration-300">
+                <div className="text-center p-4">
                   <div className="mb-3 flex justify-center">
                     <div className="h-12 w-12 animate-spin rounded-full border-4 border-cyan-400/30 border-t-cyan-400" />
                   </div>
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-base font-bold text-white tracking-wide">
                     Validando acceso...
                   </p>
                 </div>
@@ -172,59 +180,61 @@ export default function CheckInPage() {
           </div>
 
           {/* Instrucciones */}
-          <div className="border-t border-white/10 bg-[#0a0f14]/50 px-4 py-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">📷 Asegura buena iluminación</span>
-              <span className="text-slate-500">🎯 Centra el código QR</span>
+          <div className="border-t border-white/10 bg-[#0a0f14]/80 px-4 py-3">
+            <div className="flex items-center justify-between text-xs font-medium text-slate-300">
+              <span>📷 Buena iluminación</span>
+              <span>🎯 Apunta al código QR</span>
             </div>
           </div>
         </div>
 
         {/* Resultado de validación */}
         {status && (
-          <div className={`mt-4 overflow-hidden rounded-xl border-2 transition-all duration-300 animate-in slide-in-from-bottom-4 ${
+          <div className={`mt-5 overflow-hidden rounded-2xl border-2 transition-all duration-300 animate-in slide-in-from-bottom-4 shadow-2xl ${
             status.success
-              ? 'border-emerald-400/30 bg-emerald-400/10'
-              : 'border-red-400/30 bg-red-400/10'
+              ? 'border-emerald-400/50 bg-emerald-950/80 text-emerald-100'
+              : 'border-red-500/50 bg-red-950/80 text-red-100'
           }`}>
-            <div className="p-4">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                  status.success ? 'bg-emerald-400/20' : 'bg-red-400/20'
+            <div className="p-5">
+              <div className="flex items-start gap-4">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                  status.success ? 'bg-emerald-400/20 text-emerald-300' : 'bg-red-400/20 text-red-300'
                 }`}>
-                  <span className="text-xl">
-                    {status.success ? '✅' : '❌'}
+                  <span className="text-2xl">
+                    {status.success ? '✅' : '🚫'}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`font-semibold ${
+                  <p className={`text-lg font-bold tracking-tight ${
                     status.success ? 'text-emerald-300' : 'text-red-300'
                   }`}>
-                    {status.success ? 'Acceso Concedido' : 'Acceso Denegado'}
+                    {status.success ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO'}
                   </p>
-                  <p className="text-xs text-slate-300 mt-0.5 break-words">
+                  <p className="text-sm text-slate-200 mt-1 font-medium leading-snug break-words">
                     {status.message}
                   </p>
                 </div>
               </div>
               
               {status.email && (
-                <div className="mt-3 rounded-lg bg-black/30 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                    Invitado
-                  </p>
-                  <p className="text-sm font-mono text-white truncate">
-                    {status.email}
-                  </p>
+                <div className="mt-4 rounded-xl bg-black/40 border border-white/10 p-3.5 space-y-2">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-widest text-cyan-400">
+                      Asistente Registrado
+                    </p>
+                    <p className="text-base font-semibold font-mono text-white truncate mt-0.5">
+                      {status.email}
+                    </p>
+                  </div>
                   {status.eventName && (
-                    <>
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 mt-2">
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
                         Evento
                       </p>
-                      <p className="text-sm text-slate-300">
+                      <p className="text-xs font-medium text-slate-200 mt-0.5">
                         {status.eventName}
                       </p>
-                    </>
+                    </div>
                   )}
                 </div>
               )}
@@ -233,7 +243,7 @@ export default function CheckInPage() {
         )}
 
         {/* Footer */}
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-4">
           <button
             onClick={() => {
               setStatus(null);
@@ -243,6 +253,25 @@ export default function CheckInPage() {
           >
             Limpiar último resultado
           </button>
+          
+          <div className="flex flex-col items-center gap-3">
+            {currentUser && isOrganizador && (
+              <button
+                onClick={() => window.location.href = "/admin"}
+                className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-6 py-2 text-xs font-medium text-cyan-400 hover:bg-cyan-400/10"
+              >
+                Volver al Panel Administrativo
+              </button>
+            )}
+            
+            <button
+              onClick={() => signOut()}
+              className="rounded-lg border border-red-400/20 bg-red-400/5 px-6 py-2 text-xs font-medium text-red-400 hover:bg-red-400/10"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+
           <p className="mt-3 text-[10px] uppercase tracking-wider text-slate-600">
             LIZARD TECH • Seguridad Digital
           </p>

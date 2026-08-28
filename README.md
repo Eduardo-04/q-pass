@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎟️ Q-Pass — Plataforma Digital de Gestión de Accesos y Boletería
 
-## Getting Started
+Q-Pass es una solución web de boletería digital y gestión de entradas orientada al mercado mexicano (eventos universitarios, fiestas, conferencias, torneos, recaudaciones y festivales). Permite a organizadores crear eventos, emitir entradas con código QR y validarlas rápidamente en puerta desde un teléfono móvil.
 
-First, run the development server:
+---
+
+## 🚀 Tecnologías Principales
+
+- **Framework**: [Next.js 16 (App Router)](https://nextjs.org) con React 19 y TypeScript.
+- **Backend & Base de Datos**: [Supabase](https://supabase.com) (Auth, PostgreSQL DB, `@supabase/ssr`, RLS y Funciones RPC).
+- **Pasarela de Pagos**: [Stripe](https://stripe.com) (Soporta Checkout real y Modo Simulación).
+- **Documentos & QR**: `@react-pdf/renderer` para PDFs descargables y `html5-qrcode` para escaneo móvil.
+- **Estilos**: TailwindCSS 4 y Lucide React.
+- **Notificaciones**: `sonner` Toasters.
+
+---
+
+## 📋 Requisitos Previos
+
+- **Node.js**: `v18.x` o superior (`v20.x` recomendado).
+- **npm** / **yarn** / **pnpm** / **bun**.
+- Cuenta activa en **Supabase** (para BD de producción/desarrollo) o instancia local.
+
+---
+
+## ⚙️ Variables de Entorno
+
+Copia el archivo de ejemplo `.env.example` a `.env.local`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Configura los siguientes valores en `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Descripción | Ejemplo |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL de tu proyecto Supabase | `https://xxxx.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave pública anónima de Supabase | `sb_publishable_...` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave privada Service Role (Bypasses RLS) | `sb_secret_...` |
+| `STRIPE_SECRET_KEY` | Clave secreta de Stripe o `simulated` para pruebas locales | `simulated` |
+| `STRIPE_WEBHOOK_SECRET` | Secret de firmas para webhooks de Stripe | `whsec_...` |
+| `NEXT_PUBLIC_SITE_URL` | URL base de la aplicación | `http://localhost:3000` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🛠️ Instalación y Comandos
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Instalar dependencias
+```bash
+npm install
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 2. Iniciar en modo desarrollo
+```bash
+npm run dev
+```
+Accede a [http://localhost:3000](http://localhost:3000) en tu navegador.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3. Verificación de Código y Calidad
+```bash
+# Verificación de linter (ESLint)
+npm run lint
 
-## Deploy on Vercel
+# Verificación de tipos TypeScript
+npx tsc --noEmit
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Compilación para producción
+npm run build
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Iniciar servidor de producción
+npm run start
+```
+
+---
+
+## 🗄️ Migraciones de Base de Datos (Supabase)
+
+Para inicializar las políticas de seguridad (RLS) y la función atómica anti-sobreventa:
+
+1. Ingresa a tu panel de Supabase → **SQL Editor**.
+2. Ejecuta el archivo [`sql/rls_migration.sql`](file:///d:/PROYECTOS/qpass-app/sql/rls_migration.sql) para habilitar RLS y políticas RBAC.
+3. Ejecuta el archivo [`sql/create_rpc_function.sql`](file:///d:/PROYECTOS/qpass-app/sql/create_rpc_function.sql) para registrar la función RPC `process_ticket_purchase`.
+
+---
+
+## 🔒 Control de Acceso Basado en Roles (RBAC)
+
+- **master**: Administrador total de la plataforma. Gestiona comisiones, socios y todos los eventos.
+- **organizador**: Creador del evento. Gestiona sus propios eventos y consulta métricas/asistencia.
+- **checador**: Personal de acceso. Solo tiene acceso a la vista `/check-in` para escanear y validar QRs.
+- **staff**: Rol base sin acceso administrativo.
+
+---
+
+## 📱 Guía para Probar el Escáner y Validación QR
+
+1. **Crear o activar un evento**: En `/admin`, crea un evento con vigencia actual y boletos disponibles.
+2. **Adquirir un boleto**: Ve a `/boletos`, selecciona el evento e ingresa tus datos.
+3. **Obtener el QR**: En la pantalla `/checkout/success`, visualiza el QR generado o descarga el PDF.
+4. **Validar entrada**:
+   - Inicia sesión en `/login` con una cuenta de rol `checador` o `organizador`.
+   - Abre la ruta `/check-in`.
+   - Escanea el código QR apuntando la cámara de tu celular o dispositivo.
+   - Verás el mensaje "Acceso Concedido" (verde) o la alerta en caso de reuso / boleto inválido.

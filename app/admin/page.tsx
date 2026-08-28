@@ -1,21 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/utils/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
+import Image from "next/image";
+import type { Evento, EventoFormData, PerfilCliente, Mensaje } from "@/types";
 
-type Evento = {
-  id: string;
-  nombre: string;
-  capacidad: number;
-  precio: number;
-  fecha_evento: string;
-  visible_desde: string;
-  visible_hasta: string;
-  activo: boolean;
-};
-
-type EventoFormData = Omit<Evento, "id">;
+const supabase = createClient();
 
 const initialFormState: EventoFormData = {
   nombre: "",
@@ -25,16 +17,24 @@ const initialFormState: EventoFormData = {
   visible_desde: "",
   visible_hasta: "",
   activo: true,
+  comision_porcentaje: 10,
+  comision_fija: 0,
 };
 
 export default function AdminPortal() {
+  const { user: currentUser, isMaster, signOut } = useAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<EventoFormData>(initialFormState);
-  const [mensaje, setMensaje] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+  const [mensaje, setMensaje] = useState<Mensaje | null>(null);
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [isLoading, setIsLoading] = useState({ form: false, delete: false });
   const [busqueda, setBusqueda] = useState("");
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+
+  const [userProfile, setUserProfile] = useState<PerfilCliente | null>(null);
+  const [showClientes, setShowClientes] = useState(false);
+  const [perfiles, setPerfiles] = useState<PerfilCliente[]>([]);
+  const [busquedaSocios, setBusquedaSocios] = useState("");
 
   const hoy = new Date().toISOString().split("T")[0];
 
@@ -44,10 +44,39 @@ export default function AdminPortal() {
   };
 
   const fetchEventos = useCallback(async () => {
-    const { data, error } = await supabase
+    await Promise.resolve();
+    if (!currentUser) return;
+
+    // Cargar perfil de comisiones
+    const { data: profile } = await supabase
+      .from("perfiles_cliente")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .single();
+    
+    if (profile) {
+      setUserProfile(profile);
+      // Si es un nuevo evento y no es Master, pre-cargar comisiones del perfil
+      if (!editingId) {
+        setFormData(prev => ({
+          ...prev,
+          comision_porcentaje: profile.comision_porcentaje,
+          comision_fija: profile.comision_fija
+        }));
+      }
+    }
+
+    let query = supabase
       .from("eventos")
-      .select("id, nombre, capacidad, precio, fecha_evento, visible_desde, visible_hasta, activo")
+      .select("id, nombre, capacidad, precio, fecha_evento, visible_desde, visible_hasta, activo, organizador_id, comision_porcentaje, comision_fija")
       .order("fecha_evento", { ascending: false });
+
+    // Filtro multi-cliente: Si NO es Master, solo ve lo que le pertenece
+    if (!isMaster) {
+      query = query.eq("organizador_id", currentUser.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       showMessage("❌ Error al cargar eventos: " + error.message, "error");
@@ -55,10 +84,21 @@ export default function AdminPortal() {
     }
 
     setEventos((data ?? []) as Evento[]);
-  }, []);
+
+    // Si es Master, cargar todos los perfiles de clientes
+    if (isMaster) {
+      const { data: profiles } = await supabase
+        .from("perfiles_cliente")
+        .select("*");
+      setPerfiles(profiles || []);
+    }
+  }, [currentUser, isMaster, editingId]);
 
   useEffect(() => {
-    fetchEventos();
+    const timer = setTimeout(() => {
+      fetchEventos();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [fetchEventos]);
 
   const resetForm = useCallback(() => {
@@ -80,6 +120,8 @@ export default function AdminPortal() {
       visible_desde: ev.visible_desde?.slice(0, 10) ?? "",
       visible_hasta: ev.visible_hasta?.slice(0, 10) ?? "",
       activo: ev.activo ?? true,
+      comision_porcentaje: ev.comision_porcentaje ?? 10,
+      comision_fija: ev.comision_fija ?? 0,
     });
     showMessage(`Editando: ${ev.nombre}`, "info");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -116,6 +158,9 @@ export default function AdminPortal() {
       visible_desde: formData.visible_desde,
       visible_hasta: formData.visible_hasta,
       activo: formData.activo,
+      comision_porcentaje: formData.comision_porcentaje,
+      comision_fija: formData.comision_fija,
+      organizador_id: currentUser?.id, // Firma del creador
     };
 
     if (editingId) {
@@ -194,6 +239,24 @@ export default function AdminPortal() {
     setIsLoading(prev => ({ ...prev, delete: false }));
   }, [hoy, editingId, resetForm, fetchEventos]);
 
+  const actualizarPerfilCliente = async (userId: string, porcentaje: number, fija: number) => {
+    const { error } = await supabase
+      .from("perfiles_cliente")
+      .upsert({ 
+        user_id: userId, 
+        comision_porcentaje: porcentaje, 
+        comision_fija: fija,
+        actualizado_el: new Date().toISOString()
+      });
+
+    if (error) {
+      showMessage("Error al actualizar perfil: " + error.message, "error");
+    } else {
+      showMessage("Perfil de socio actualizado", "success");
+      fetchEventos();
+    }
+  };
+
   const eventosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (!q) return eventos;
@@ -214,34 +277,149 @@ export default function AdminPortal() {
         {/* Header simplificado */}
         <div className="mb-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="mb-1 text-xs font-medium uppercase tracking-wider text-cyan-400">
-                Panel de Control
-              </p>
-              <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-                Q-Pass Central
-              </h1>
-              <p className="mt-1 text-sm text-slate-400">
-                Gestión de eventos y operación
-              </p>
+            <div className="flex items-center gap-6">
+              <Image 
+                src="/q-pass-logo.png" 
+                alt="Q-Pass Logo" 
+                width={100} 
+                height={100} 
+                priority
+                className="drop-shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+              />
+              <div className="h-12 w-px bg-white/10 hidden md:block" />
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-cyan-400">
+                  Panel de Gestión
+                </p>
+                <p className="text-sm text-slate-500">Operaciones y Eventos</p>
+              </div>
             </div>
 
             <div className="flex gap-3">
+              {isMaster && (
+                <button
+                  onClick={() => setShowClientes(!showClientes)}
+                  className={`rounded-lg border px-4 py-2 text-xs font-medium transition ${
+                    showClientes 
+                      ? "border-cyan-400 bg-cyan-400/10 text-cyan-400" 
+                      : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                  }`}
+                >
+                  {showClientes ? "Ver Eventos" : "Gestionar Socios"}
+                </button>
+              )}
+              <button
+                onClick={() => signOut()}
+                className="rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-400/10"
+              >
+                Cerrar Sesión
+              </button>
               <div className="rounded-lg border border-white/10 bg-[#111823] px-4 py-2">
                 <p className="text-xs text-slate-500">Total eventos</p>
                 <p className="text-2xl font-semibold text-white">{eventos.length}</p>
-              </div>
-              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-4 py-2">
-                <p className="text-xs text-slate-500">Modo</p>
-                <p className="text-sm font-medium text-cyan-300">
-                  {editingId ? "Edición" : "Creación"}
-                </p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+        {showClientes && isMaster ? (
+          <div className="animate-fade-in space-y-6">
+            <div className="rounded-xl border border-white/10 bg-[#111823] p-6 shadow-2xl">
+              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Gestión de Socios (Partners)</h2>
+                  <p className="text-xs text-slate-400">Define las comisiones maestras y nombres comerciales de tus clientes.</p>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar socio por ID o Nombre..."
+                  value={busquedaSocios}
+                  onChange={(e) => setBusquedaSocios(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-[#0a0f14] px-4 py-2 text-xs text-white outline-none focus:border-cyan-400/50 sm:w-64"
+                />
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-left text-[10px] uppercase tracking-wider text-slate-500">
+                      <th className="px-4 py-3">Referencia / Empresa</th>
+                      <th className="px-4 py-3">ID de Usuario (Auth)</th>
+                      <th className="px-4 py-3 text-center">Comisión (%)</th>
+                      <th className="px-4 py-3 text-center">Cargo Fijo ($)</th>
+                      <th className="px-4 py-3 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {perfiles
+                      .filter(p => 
+                        p.user_id.toLowerCase().includes(busquedaSocios.toLowerCase()) || 
+                        (p.nombre_empresa || "").toLowerCase().includes(busquedaSocios.toLowerCase())
+                      )
+                      .map((perf) => (
+                      <tr key={perf.user_id} className="text-slate-300 transition hover:bg-white/[0.02]">
+                        <td className="px-4 py-4">
+                          <input 
+                            type="text" 
+                            placeholder="Nombre de la Bolera"
+                            defaultValue={perf.nombre_empresa}
+                            onBlur={(e) => {
+                              const val = e.target.value;
+                              supabase.from("perfiles_cliente").update({ nombre_empresa: val }).eq("user_id", perf.user_id).then(() => fetchEventos());
+                            }}
+                            className="w-full bg-transparent border-b border-transparent focus:border-cyan-400/50 outline-none transition text-sm font-medium text-white"
+                          />
+                        </td>
+                        <td className="px-4 py-4 font-mono text-[10px] text-slate-500">{perf.user_id}</td>
+                        <td className="px-4 py-4 text-center">
+                          <input 
+                            type="number" 
+                            defaultValue={perf.comision_porcentaje}
+                            className="w-16 rounded bg-white/5 px-2 py-1 text-center outline-none focus:ring-1 focus:ring-cyan-400/50 text-cyan-300"
+                            id={`pct-${perf.user_id}`}
+                          />
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <input 
+                            type="number" 
+                            defaultValue={perf.comision_fija}
+                            className="w-16 rounded bg-white/5 px-2 py-1 text-center outline-none focus:ring-1 focus:ring-cyan-400/50 text-amber-300"
+                            id={`fix-${perf.user_id}`}
+                          />
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <button 
+                            onClick={() => {
+                              const p = (document.getElementById(`pct-${perf.user_id}`) as HTMLInputElement).value;
+                              const f = (document.getElementById(`fix-${perf.user_id}`) as HTMLInputElement).value;
+                              actualizarPerfilCliente(perf.user_id, Number(p), Number(f));
+                            }}
+                            className="rounded-md bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-400 transition hover:bg-cyan-400/20"
+                          >
+                            Guardar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {perfiles.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-slate-500 italic">No hay perfiles de socios registrados en la base de datos.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-6 rounded-lg bg-amber-400/5 border border-amber-400/10 p-4">
+                <p className="text-[10px] text-amber-400 font-bold uppercase mb-1">Nota para el Superadmin</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Los cambios aquí realizados definen la <strong>tarifa predeterminada</strong> para nuevos eventos de este socio. 
+                  Para modificar la comisión de un evento que ya fue creado, debes usar el botón <strong>&quot;Editar&quot;</strong> directamente en la lista de eventos.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
           {/* Formulario - más compacto y limpio */}
           <div className="space-y-4">
             <div className="rounded-xl border border-white/10 bg-[#111823]/50 p-5">
@@ -265,59 +443,113 @@ export default function AdminPortal() {
               </div>
 
               <form onSubmit={guardarEvento} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Nombre del evento"
-                  className="w-full rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/20"
-                  value={formData.nombre}
-                  onChange={(e) => updateFormField("nombre", e.target.value)}
-                  required
-                />
-
-                <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Nombre del Evento</label>
                   <input
-                    type="number"
-                    placeholder="Capacidad"
-                    className="w-full rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/50"
-                    value={formData.capacidad}
-                    onChange={(e) => updateFormField("capacidad", Number(e.target.value))}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Precio"
-                    step="0.01"
-                    className="w-full rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/50"
-                    value={formData.precio}
-                    onChange={(e) => updateFormField("precio", Number(e.target.value))}
-                  />
-                </div>
-
-                <input
-                  type="date"
-                  className="w-full rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/50"
-                  value={formData.fecha_evento}
-                  onChange={(e) => updateFormField("fecha_evento", e.target.value)}
-                  required
-                />
-
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="date"
-                    placeholder="Visible desde"
-                    className="w-full rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/50"
-                    value={formData.visible_desde}
-                    onChange={(e) => updateFormField("visible_desde", e.target.value)}
-                    required
-                  />
-                  <input
-                    type="date"
-                    placeholder="Visible hasta"
-                    className="w-full rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/50"
-                    value={formData.visible_hasta}
-                    onChange={(e) => updateFormField("visible_hasta", e.target.value)}
+                    type="text"
+                    placeholder="Ej: Festival Universitario Q-Pass 2026"
+                    className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                    value={formData.nombre}
+                    onChange={(e) => updateFormField("nombre", e.target.value)}
                     required
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Capacidad (Cupo)</label>
+                    <input
+                      type="number"
+                      placeholder="Ej: 500"
+                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                      value={formData.capacidad}
+                      onChange={(e) => updateFormField("capacidad", Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Precio ($ MXN)</label>
+                    <input
+                      type="number"
+                      placeholder="0 para Gratuito"
+                      step="0.01"
+                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                      value={formData.precio}
+                      onChange={(e) => updateFormField("precio", Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Fecha del Evento</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                    value={formData.fecha_evento}
+                    onChange={(e) => updateFormField("fecha_evento", e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Visible Desde</label>
+                    <input
+                      type="date"
+                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                      value={formData.visible_desde}
+                      onChange={(e) => updateFormField("visible_desde", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Visible Hasta</label>
+                    <input
+                      type="date"
+                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                      value={formData.visible_hasta}
+                      onChange={(e) => updateFormField("visible_hasta", e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Sección de Comisiones - Solo visible para el Master */}
+                {isMaster ? (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Comisión Q-Pass (%)</label>
+                      <input
+                        type="number"
+                        placeholder="Ej: 10"
+                        className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                        value={formData.comision_porcentaje}
+                        onChange={(e) => updateFormField("comision_porcentaje", Number(e.target.value))}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400 italic">Ajuste manual para este evento</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Cargo Fijo Q-Pass ($)</label>
+                      <input
+                        type="number"
+                        placeholder="Ej: 5.00"
+                        className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                        value={formData.comision_fija}
+                        onChange={(e) => updateFormField("comision_fija", Number(e.target.value))}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400 italic">Costo operativo por boleto</p>
+                    </div>
+                  </div>
+                ) : (
+                  // Para el Gerente, mostrar información informativa solamente si el perfil existe
+                  userProfile && (
+                    <div className="rounded-xl bg-cyan-400/10 border border-cyan-400/20 p-3.5">
+                      <p className="text-xs text-cyan-300 uppercase tracking-widest font-bold mb-1">Costo de Servicio Configurado</p>
+                      <p className="text-xs text-slate-200">
+                        Este evento operará con tu tarifa pactada de <span className="text-white font-bold">{userProfile.comision_porcentaje}%</span> + <span className="text-white font-bold">${userProfile.comision_fija} MXN</span> por boleto.
+                      </p>
+                    </div>
+                  )
+                )}
 
                 <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm">
                   <input
@@ -405,6 +637,13 @@ export default function AdminPortal() {
                               <h3 className="font-semibold text-white truncate" title={ev.nombre}>
                                 {ev.nombre}
                               </h3>
+                              {isMaster && (
+                                <p className="text-[10px] font-mono text-cyan-400 mt-0.5">
+                                  👤 {ev.organizador_id === currentUser?.id 
+                                      ? "TI (Tú)" 
+                                      : perfiles.find(p => p.user_id === ev.organizador_id)?.nombre_empresa || "Cliente Externo"}
+                                </p>
+                              )}
                               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
                                 <span>📅 {new Date(ev.fecha_evento).toLocaleDateString()}</span>
                                 <span>👥 {ev.capacidad.toLocaleString()}</span>
@@ -467,7 +706,8 @@ export default function AdminPortal() {
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
-  );
+  </div>
+);
 }
