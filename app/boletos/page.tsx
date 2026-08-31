@@ -15,6 +15,8 @@ type Evento = {
   activo: boolean;
   capacidad?: number;
   precio?: number;
+  comision_porcentaje?: number;
+  comision_fija?: number;
   banner_url?: string;
 };
 
@@ -46,7 +48,7 @@ export default function HomePage() {
     const fetchEventos = async () => {
       const { data, error } = await supabase
         .from("eventos")
-        .select("id, nombre, fecha_evento, visible_desde, visible_hasta, activo, capacidad, precio")
+        .select("id, nombre, fecha_evento, visible_desde, visible_hasta, activo, capacidad, precio, comision_porcentaje, comision_fija, banner_url")
         .eq("activo", true)
         .lte("visible_desde", hoy)
         .gte("visible_hasta", hoy)
@@ -143,7 +145,7 @@ export default function HomePage() {
           evento_id: selectedEvento,
           asistentes: asistentesNormalizados,
           email_comprador: mainEmail,
-          total: asistentes.length * (eventoActual?.precio || 0)
+          total: totalFinal
         }),
       });
 
@@ -173,7 +175,15 @@ export default function HomePage() {
     }
   };
 
-  const total = asistentes.length * (eventoActual?.precio || 0);
+  const precioUnitario = Number(eventoActual?.precio || 0);
+  const subtotalBoletos = asistentes.length * precioUnitario;
+  
+  // Cargo por Servicio Digital (Comisión asignada al evento o default 10% + $0)
+  const pctComision = Number(eventoActual?.comision_porcentaje ?? 10);
+  const fijaComision = Number(eventoActual?.comision_fija ?? 0);
+  const cargoPorBoleto = precioUnitario > 0 ? (precioUnitario * (pctComision / 100)) + fijaComision : 0;
+  const totalCargoServicio = Math.round(asistentes.length * cargoPorBoleto * 100) / 100;
+  const totalFinal = subtotalBoletos + totalCargoServicio;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0f14] via-[#0d1219] to-[#0a0f14]">
@@ -321,18 +331,26 @@ export default function HomePage() {
               <h3 className="text-sm font-semibold text-white mb-4">Resumen de compra</h3>
               {eventoActual && (
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">{eventoActual.nombre}</span>
-                    <span className="text-white">${eventoActual.precio?.toLocaleString()} c/u</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">
+                      {asistentes.length} {asistentes.length === 1 ? "Boleto" : "Boletos"} (${precioUnitario.toLocaleString()} c/u)
+                    </span>
+                    <span className="text-white font-medium">${subtotalBoletos.toLocaleString()} MXN</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Cantidad</span>
-                    <span className="text-white">{cantidadBoletos} boletos</span>
-                  </div>
+
+                  {totalCargoServicio > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 flex items-center gap-1">
+                        Cargo por Servicio Digital
+                      </span>
+                      <span className="text-cyan-300 font-medium">+${totalCargoServicio.toLocaleString()} MXN</span>
+                    </div>
+                  )}
+
                   <div className="border-t border-white/10 pt-3 mt-2">
-                    <div className="flex justify-between font-semibold">
-                      <span className="text-white">Total</span>
-                      <span className="text-cyan-300 text-xl">${total.toLocaleString()} MXN</span>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-white text-xs uppercase font-bold tracking-wider">Total a pagar</span>
+                      <span className="text-cyan-300 text-xl font-extrabold">${totalFinal.toLocaleString()} MXN</span>
                     </div>
                   </div>
                 </div>

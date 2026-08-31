@@ -395,10 +395,21 @@ export default function AdminPortal() {
   }, [editingId, updateFormField, fetchEventos]);
 
   const eliminarEvento = useCallback(async (ev: Evento) => {
+    // 1. Verificar si el evento tiene boletos emitidos en la base de datos
+    const { count } = await supabase
+      .from("boletos")
+      .select("id", { count: "exact", head: true })
+      .eq("evento_id", ev.id);
+
+    if (count && count > 0) {
+      toast.error(`🔒 ¡Acción bloqueada! No puedes eliminar "${ev.nombre}" porque tiene ${count} boleto(s) registrado(s).`);
+      return;
+    }
+
     const caducado = ev.fecha_evento?.slice(0, 10) < hoy;
 
     if (!caducado) {
-      showMessage("Solo puedes eliminar eventos caducados", "error");
+      showMessage("Solo puedes eliminar eventos caducados sin boletos", "error");
       return;
     }
 

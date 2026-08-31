@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     // ── Verificar evento (Info básica) ──
     const { data: evento, error: eventoError } = await supabaseAdmin
       .from('eventos')
-      .select('id, nombre, capacidad, precio, activo, fecha_evento')
+      .select('id, nombre, capacidad, precio, activo, fecha_evento, comision_porcentaje, comision_fija')
       .eq('id', rawEventoId)
       .eq('activo', true)
       .single();
@@ -70,14 +70,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Validar total si fue proporcionado
-    const totalEsperado = rawAsistentes.length * evento.precio;
-    if (typeof rawTotal === 'number' && Math.abs(rawTotal - totalEsperado) > 0.01) {
-      return NextResponse.json(
-        { success: false, error: 'El total no coincide con el precio del evento' },
-        { status: 400 }
-      );
-    }
+    // Cálculo de total del servidor (Precio base + cargo por servicio digital)
+    const precioBase = Number(evento.precio || 0);
+    const pctComision = Number(evento.comision_porcentaje ?? 10);
+    const fijaComision = Number(evento.comision_fija ?? 0);
+    const cargoPorBoleto = precioBase > 0 ? (precioBase * (pctComision / 100)) + fijaComision : 0;
+    const totalEsperado = Math.round(rawAsistentes.length * (precioBase + cargoPorBoleto) * 100) / 100;
 
     // ── LLAMADA ATÓMICA AL RPC CON FALLBACK DIRECTO ──
     const esGratuito = totalEsperado === 0;
@@ -171,7 +169,10 @@ export async function POST(req: Request) {
 
     // Crear Stripe Checkout Session
     const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const unitAmountCentavos = Math.round((totalEsperado / rawAsistentes.length) * 100);
+
     const session = await stripe.checkout.sessions.create({
+      // Habilita Tarjetas, Apple Pay, Google Pay, Link y métodos activos en Dashboard
       payment_method_types: ['card'],
       line_items: [
         {
@@ -179,9 +180,9 @@ export async function POST(req: Request) {
             currency: 'mxn',
             product_data: {
               name: `Boletos para ${evento.nombre}`,
-              description: `${rawAsistentes.length} boleto(s) de acceso general`,
+              description: `${rawAsistentes.length} boleto(s) de acceso digital Q-Pass`,
             },
-            unit_amount: Math.round(evento.precio * 100),
+            unit_amount: unitAmountCentavos,
           },
           quantity: rawAsistentes.length,
         },
