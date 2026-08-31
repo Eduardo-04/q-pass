@@ -363,10 +363,19 @@ export default function AdminPortal() {
 
     setIsLoading(prev => ({ ...prev, form: true }));
     
+    // Si hay zonas configuradas, calcular capacidad total y precio mínimo automáticamente
+    const capacidadFinal = zonasForm.length > 0 
+      ? zonasForm.reduce((sum, z) => sum + Number(z.capacidad || 0), 0)
+      : formData.capacidad;
+
+    const precioFinal = zonasForm.length > 0
+      ? Math.min(...zonasForm.map(z => Number(z.precio || 0)))
+      : formData.precio;
+
     const payload: Record<string, any> = {
       nombre: formData.nombre,
-      capacidad: formData.capacidad,
-      precio: formData.precio,
+      capacidad: capacidadFinal,
+      precio: precioFinal,
       fecha_evento: formData.fecha_evento,
       visible_desde: formData.visible_desde,
       visible_hasta: formData.visible_hasta,
@@ -962,29 +971,44 @@ export default function AdminPortal() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Capacidad (Cupo)</label>
-                    <input
-                      type="number"
-                      placeholder="Ej: 500"
-                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
-                      value={formData.capacidad}
-                      onChange={(e) => updateFormField("capacidad", Number(e.target.value))}
-                    />
+                {zonasForm.length > 0 ? (
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-3.5 flex items-center justify-between text-xs">
+                    <div>
+                      <p className="font-bold text-cyan-300 uppercase tracking-wider text-[11px]">⚡ Calculado por Zonas ({zonasForm.length})</p>
+                      <p className="text-slate-300 mt-0.5">
+                        Capacidad Total: <span className="font-extrabold text-white">{zonasForm.reduce((sum, z) => sum + Number(z.capacidad || 0), 0)} boletos</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 block uppercase">Precio Base</span>
+                      <span className="font-extrabold text-cyan-300 text-sm">Desde ${Math.min(...zonasForm.map(z => Number(z.precio || 0)))} MXN</span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Precio ($ MXN)</label>
-                    <input
-                      type="number"
-                      placeholder="0 para Gratuito"
-                      step="0.01"
-                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
-                      value={formData.precio}
-                      onChange={(e) => updateFormField("precio", Number(e.target.value))}
-                    />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Capacidad (Cupo)</label>
+                      <input
+                        type="number"
+                        placeholder="Ej: 500"
+                        className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                        value={formData.capacidad}
+                        onChange={(e) => updateFormField("capacidad", Number(e.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Precio ($ MXN)</label>
+                      <input
+                        type="number"
+                        placeholder="0 para Gratuito"
+                        step="0.01"
+                        className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                        value={formData.precio}
+                        onChange={(e) => updateFormField("precio", Number(e.target.value))}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">Fecha del Evento</label>
@@ -1202,45 +1226,57 @@ export default function AdminPortal() {
                       No has agregado zonas específicas. El evento usará el precio base general (${formData.precio} MXN).
                     </p>
                   ) : (
-                    <div className="space-y-2.5 pt-1">
+                    <div className="space-y-3 pt-1">
                       {zonasForm.map((zona, idx) => (
-                        <div key={zona.id || idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-[#0a0f14] p-3 rounded-xl border border-white/10 items-center">
-                          <div className="sm:col-span-4">
-                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Nombre Zona / Fase</label>
+                        <div key={zona.id || idx} className="bg-[#080d12] p-4 rounded-xl border border-white/10 space-y-3 shadow-inner">
+                          <div className="flex flex-wrap sm:flex-nowrap gap-3 items-start justify-between">
+                            <div className="flex-1 min-w-[180px]">
+                              <label className="block text-[10px] text-slate-300 uppercase font-semibold mb-1">Nombre de Zona / Fase</label>
+                              <input
+                                type="text"
+                                placeholder="ej: VIP Front Stage"
+                                className="w-full bg-[#111823] border border-white/15 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none focus:border-cyan-400"
+                                value={zona.nombre}
+                                onChange={(e) => actualizarZona(idx, "nombre", e.target.value)}
+                              />
+                            </div>
+                            <div className="w-28">
+                              <label className="block text-[10px] text-slate-300 uppercase font-semibold mb-1">Precio ($ MXN)</label>
+                              <input
+                                type="number"
+                                className="w-full bg-[#111823] border border-white/15 rounded-lg px-3 py-2 text-xs text-cyan-300 font-extrabold outline-none focus:border-cyan-400"
+                                value={zona.precio}
+                                onChange={(e) => actualizarZona(idx, "precio", Number(e.target.value))}
+                              />
+                            </div>
+                            <div className="w-24">
+                              <label className="block text-[10px] text-slate-300 uppercase font-semibold mb-1">Capacidad</label>
+                              <input
+                                type="number"
+                                className="w-full bg-[#111823] border border-white/15 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-cyan-400"
+                                value={zona.capacidad}
+                                onChange={(e) => actualizarZona(idx, "capacidad", Number(e.target.value))}
+                              />
+                            </div>
+                            <div className="pt-5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => eliminarZona(idx)}
+                                className="text-xs text-red-400 hover:text-red-300 font-bold bg-red-500/10 hover:bg-red-500/20 px-3 py-2 rounded-lg border border-red-500/20 transition"
+                              >
+                                🗑️ Eliminar
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
                             <input
                               type="text"
-                              placeholder="ej: VIP Front Stage"
-                              className="w-full bg-[#111823] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                              value={zona.nombre}
-                              onChange={(e) => actualizarZona(idx, "nombre", e.target.value)}
+                              placeholder="Descripción opcional (ej: Incluye meet & greet, bebida de bienvenida...)"
+                              className="w-full bg-[#0d131a] border border-white/10 rounded-lg px-3 py-1.5 text-[11px] text-slate-300 placeholder:text-slate-500 outline-none focus:border-cyan-400/50"
+                              value={zona.descripcion || ""}
+                              onChange={(e) => actualizarZona(idx, "descripcion", e.target.value)}
                             />
-                          </div>
-                          <div className="sm:col-span-3">
-                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Precio ($ MXN)</label>
-                            <input
-                              type="number"
-                              className="w-full bg-[#111823] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-bold"
-                              value={zona.precio}
-                              onChange={(e) => actualizarZona(idx, "precio", Number(e.target.value))}
-                            />
-                          </div>
-                          <div className="sm:col-span-3">
-                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Capacidad</label>
-                            <input
-                              type="number"
-                              className="w-full bg-[#111823] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                              value={zona.capacidad}
-                              onChange={(e) => actualizarZona(idx, "capacidad", Number(e.target.value))}
-                            />
-                          </div>
-                          <div className="sm:col-span-2 text-right pt-3 sm:pt-0">
-                            <button
-                              type="button"
-                              onClick={() => eliminarZona(idx)}
-                              className="text-xs text-red-400 hover:text-red-300 font-bold bg-red-500/10 px-2 py-1.5 rounded-lg border border-red-500/20"
-                            >
-                              Eliminar
-                            </button>
                           </div>
                         </div>
                       ))}
