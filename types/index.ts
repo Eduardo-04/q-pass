@@ -30,6 +30,7 @@ export interface Evento {
   comision_porcentaje: number;
   comision_fija: number;
   organizador_id?: string;
+  banner_url?: string;
 }
 
 export type EventoFormData = Omit<Evento, 'id'>;

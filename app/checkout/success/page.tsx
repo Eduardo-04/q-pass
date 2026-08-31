@@ -11,6 +11,7 @@ interface Evento {
   id: string;
   nombre: string;
   fecha_evento: string;
+  banner_url?: string;
 }
 
 interface Ticket {
@@ -39,8 +40,8 @@ function SuccessContent() {
   const generateQRCode = async (text: string) => {
     try {
       return await QRCode.toDataURL(text, {
-        width: 400,
-        margin: 2,
+        width: 300,
+        margin: 1,
         color: { dark: '#0891b2', light: '#FFFFFF' }
       });
     } catch (err) {
@@ -88,9 +89,9 @@ function SuccessContent() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-cyan-400/30 border-t-cyan-400 mb-4" />
-        <p className="text-slate-400">Verificando tu pago y generando boletos...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
+        <p className="text-sm text-slate-300">Cargando detalles de tu compra...</p>
       </div>
     );
   }
@@ -139,21 +140,38 @@ function SuccessContent() {
         </p>
       </div>
 
-      {/* Resumen del Evento */}
+      {/* Resumen del Evento con Banner */}
       {data.evento && (
-        <div className="rounded-2xl border border-cyan-400/20 bg-[#111823]/90 p-5 backdrop-blur-xl shadow-[0_0_30px_rgba(34,211,238,0.1)] flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase font-bold tracking-widest text-cyan-400">Evento Reservado</p>
-            <h3 className="text-lg font-bold text-white mt-0.5">{data.evento.nombre}</h3>
-            {fechaEventoFormateada && (
-              <p className="text-xs text-slate-300 capitalize mt-1">📅 {fechaEventoFormateada}</p>
-            )}
-          </div>
-          <div className="text-right sm:border-l sm:border-white/10 sm:pl-5 w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400">Folio Orden</span>
-            <span className="text-xs font-mono font-bold text-white bg-black/40 px-2.5 py-1 rounded-md border border-white/10">
-              {data.order.id ? (data.order.id as string).slice(0, 8).toUpperCase() : "QPASS"}
-            </span>
+        <div className="rounded-2xl border border-cyan-400/20 bg-[#111823]/90 backdrop-blur-xl shadow-[0_0_30px_rgba(34,211,238,0.1)] overflow-hidden">
+          {data.evento.banner_url && (
+            <div className="relative w-full h-64 sm:h-72 overflow-hidden bg-[#070a0f] border-b border-white/10 flex items-center justify-center">
+              <img 
+                src={data.evento.banner_url} 
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover blur-xl opacity-30 pointer-events-none"
+              />
+              <img 
+                src={data.evento.banner_url} 
+                alt={`Banner de ${data.evento.nombre}`}
+                className="relative z-10 h-full max-h-64 sm:max-h-72 w-auto object-contain transition-all drop-shadow-md"
+              />
+              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#111823] via-transparent to-transparent z-20" />
+            </div>
+          )}
+          <div className="p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-widest text-cyan-400">Evento Reservado</p>
+              <h3 className="text-lg font-bold text-white mt-0.5">{data.evento.nombre}</h3>
+              {fechaEventoFormateada && (
+                <p className="text-xs text-slate-300 capitalize mt-1">📅 {fechaEventoFormateada}</p>
+              )}
+            </div>
+            <div className="text-right sm:border-l sm:border-white/10 sm:pl-5 w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400">Folio Orden</span>
+              <span className="text-xs font-mono font-bold text-white bg-black/40 px-2.5 py-1 rounded-md border border-white/10">
+                {data.order.id ? (data.order.id as string).slice(0, 8).toUpperCase() : "QPASS"}
+              </span>
+            </div>
           </div>
         </div>
       )}

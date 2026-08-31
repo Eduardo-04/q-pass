@@ -55,7 +55,7 @@ export async function GET(
       if (targetEventoId) {
         const { data: ev } = await supabaseAdmin
           .from('eventos')
-          .select('id, nombre, fecha_evento, precio')
+          .select('id, nombre, fecha_evento, precio, banner_url')
           .eq('id', targetEventoId)
           .single();
         eventoData = ev;
@@ -124,7 +124,7 @@ export async function GET(
 
     const { data: evento } = await supabaseAdmin
       .from('eventos')
-      .select('id, nombre, fecha_evento, precio')
+      .select('id, nombre, fecha_evento, precio, banner_url')
       .eq('id', eventoId)
       .single();
 

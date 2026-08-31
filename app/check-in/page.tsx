@@ -182,9 +182,17 @@ export default function CheckInPage() {
                 {scannerReady ? 'Cámara Activa' : 'Iniciando cámara...'}
               </span>
             </div>
-            <span className="text-xs font-mono font-medium text-cyan-400">
-              Escáner Q-Pass
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-mono font-medium text-cyan-400 hidden sm:inline">
+                Escáner Q-Pass
+              </span>
+              <button
+                onClick={() => signOut()}
+                className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/30 px-2.5 py-1 rounded-lg hover:bg-red-500/20 transition active:scale-95"
+              >
+                🚪 Salir
+              </button>
+            </div>
           </div>
 
           {/* Contenedor del scanner */}

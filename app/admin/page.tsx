@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import Image from "next/image";
 import type { Evento, EventoFormData, PerfilCliente, Mensaje } from "@/types";
+import { toast } from "sonner";
 
 const supabase = createClient();
 
@@ -19,6 +20,7 @@ const initialFormState: EventoFormData = {
   activo: true,
   comision_porcentaje: 10,
   comision_fija: 0,
+  banner_url: "",
 };
 
 export default function AdminPortal() {
@@ -44,6 +46,80 @@ export default function AdminPortal() {
     created_at?: string;
   }>>([]);
   const [busquedaSocios, setBusquedaSocios] = useState("");
+  const [credencialesModal, setCredencialesModal] = useState<{
+    open: boolean;
+    email?: string;
+    password?: string;
+    empresa?: string;
+    whatsappUrl?: string;
+  } | null>(null);
+  const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<{
+    id?: string;
+    nombre_empresa: string;
+    nombre_contacto: string;
+    email: string;
+    telefono: string;
+    comision_porcentaje: number;
+    comision_fija: number;
+    password: string;
+  } | null>(null);
+
+  const [nuevoStaffNombre, setNuevoStaffNombre] = useState("");
+  const [nuevoStaffPin, setNuevoStaffPin] = useState("");
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+
+  const crearPinStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoStaffNombre) return;
+
+    try {
+      const res = await fetch("/api/staff/pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          nombre: nuevoStaffNombre,
+          pin: nuevoStaffPin || undefined,
+          organizadorId: currentUser?.id
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(`PIN ${data.pin} creado para ${nuevoStaffNombre}`);
+        const cleanMessage = `Hola ${nuevoStaffNombre} 👋, tu PIN de acceso para escanear accesos en Q-Pass es: *${data.pin}*\nEntra a: ${window.location.origin}/login`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(cleanMessage)}`, "_blank");
+        setNuevoStaffNombre("");
+        setNuevoStaffPin("");
+        setStaffModalOpen(false);
+      } else {
+        toast.error(data.error || "Error creando PIN");
+      }
+    } catch {
+      toast.error("Error al conectar con el servidor");
+    }
+  };
+
+  const convertirUrlExterna = async (urlStr: string) => {
+    if (!urlStr || !urlStr.startsWith("http") || urlStr.startsWith("data:")) return;
+    try {
+      toast.loading("Procesando imagen para PDF...", { id: "proxy-img" });
+      const res = await fetch("/api/image-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlStr })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.base64) {
+        updateFormField("banner_url", data.base64);
+        toast.success("Imagen optimizada y lista para PDF e impresión", { id: "proxy-img" });
+      } else {
+        toast.dismiss("proxy-img");
+      }
+    } catch {
+      toast.dismiss("proxy-img");
+    }
+  };
 
   const hoy = new Date().toISOString().split("T")[0];
 
@@ -142,10 +218,97 @@ export default function AdminPortal() {
       activo: ev.activo ?? true,
       comision_porcentaje: ev.comision_porcentaje ?? 10,
       comision_fija: ev.comision_fija ?? 0,
+      banner_url: ev.banner_url ?? "",
     });
     showMessage(`Editando: ${ev.nombre}`, "info");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
+
+  const actualizarPerfilCliente = async (userId: string, porcentaje: number, fija: number) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/socios", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token || ""}`
+        },
+        body: JSON.stringify({ userId, comision_porcentaje: porcentaje, comision_fija: fija })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Tarifa del socio actualizada correctamente");
+        fetchEventos();
+      } else {
+        toast.error(data.error || "Error al actualizar tarifa del socio");
+      }
+    } catch (err) {
+      toast.error("Error conectando con el servidor");
+    }
+  };
+
+  const abrirModalAprobacion = (sol: any) => {
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    setSolicitudSeleccionada({
+      id: sol.id,
+      nombre_empresa: sol.nombre_empresa || "",
+      nombre_contacto: sol.nombre_contacto || "",
+      email: sol.email || "",
+      telefono: sol.telefono || "",
+      comision_porcentaje: 10,
+      comision_fija: 0,
+      password: `QPass#${randomNum}`
+    });
+  };
+
+  const confirmarAprobacionSocio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!solicitudSeleccionada) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/socios", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token || ""}`
+        },
+        body: JSON.stringify({
+          email: solicitudSeleccionada.email,
+          password: solicitudSeleccionada.password,
+          nombreEmpresa: solicitudSeleccionada.nombre_empresa,
+          nombreContacto: solicitudSeleccionada.nombre_contacto,
+          comision_porcentaje: solicitudSeleccionada.comision_porcentaje,
+          comision_fija: solicitudSeleccionada.comision_fija,
+          leadId: solicitudSeleccionada.id
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`¡Socio ${solicitudSeleccionada.nombre_empresa} aprobado exitosamente!`);
+        const cleanTel = (solicitudSeleccionada.telefono || '').replace(/\D/g, '');
+        const formattedTel = cleanTel.length === 10 ? `52${cleanTel}` : cleanTel;
+        const waUrl = `https://wa.me/${formattedTel}?text=${encodeURIComponent(data.invitationText)}`;
+        
+        const empresaNombre = solicitudSeleccionada.nombre_empresa;
+        setSolicitudSeleccionada(null);
+        setCredencialesModal({
+          open: true,
+          email: data.email,
+          password: data.password,
+          empresa: empresaNombre,
+          whatsappUrl: waUrl
+        });
+
+        fetchEventos();
+      } else {
+        toast.error(data.error || "Error al aprobar socio");
+      }
+    } catch {
+      toast.error("Error conectando con el servidor");
+    }
+  };
 
   const validateForm = (): boolean => {
     const { nombre, fecha_evento, visible_desde, visible_hasta } = formData;
@@ -170,7 +333,7 @@ export default function AdminPortal() {
 
     setIsLoading(prev => ({ ...prev, form: true }));
     
-    const payload = {
+    const payload: Record<string, any> = {
       nombre: formData.nombre,
       capacidad: formData.capacidad,
       precio: formData.precio,
@@ -183,29 +346,33 @@ export default function AdminPortal() {
       organizador_id: currentUser?.id, // Firma del creador
     };
 
-    if (editingId) {
-      const { error } = await supabase
-        .from("eventos")
-        .update(payload)
-        .eq("id", editingId);
+    if (formData.banner_url) {
+      payload.banner_url = formData.banner_url;
+    }
 
-      if (error) {
-        showMessage("Error al actualizar: " + error.message, "error");
-      } else {
-        showMessage("Evento actualizado", "success");
-        resetForm();
-        fetchEventos();
+    let { error } = editingId 
+      ? await supabase.from("eventos").update(payload).eq("id", editingId)
+      : await supabase.from("eventos").insert([payload]);
+
+    if (error && error.message.includes("banner_url")) {
+      // Fallback: Si la columna banner_url aún no existe en Supabase, reintentar guardando los datos del evento
+      delete payload.banner_url;
+      const retry = editingId 
+        ? await supabase.from("eventos").update(payload).eq("id", editingId)
+        : await supabase.from("eventos").insert([payload]);
+      
+      error = retry.error;
+      if (!error) {
+        toast.warning("Evento guardado. Ejecuta el SQL en Supabase para activar los banners.");
       }
+    }
+
+    if (error) {
+      showMessage(`Error al ${editingId ? "actualizar" : "crear"} evento: ${error.message}`, "error");
     } else {
-      const { error } = await supabase.from("eventos").insert([payload]);
-
-      if (error) {
-        showMessage("Error al crear evento: " + error.message, "error");
-      } else {
-        showMessage("Evento creado", "success");
-        resetForm();
-        fetchEventos();
-      }
+      showMessage(`Evento ${editingId ? "actualizado" : "creado"} con éxito`, "success");
+      resetForm();
+      fetchEventos();
     }
 
     setIsLoading(prev => ({ ...prev, form: false }));
@@ -259,24 +426,6 @@ export default function AdminPortal() {
     setIsLoading(prev => ({ ...prev, delete: false }));
   }, [hoy, editingId, resetForm, fetchEventos]);
 
-  const actualizarPerfilCliente = async (userId: string, porcentaje: number, fija: number) => {
-    const { error } = await supabase
-      .from("perfiles_cliente")
-      .upsert({ 
-        user_id: userId, 
-        comision_porcentaje: porcentaje, 
-        comision_fija: fija,
-        actualizado_el: new Date().toISOString()
-      });
-
-    if (error) {
-      showMessage("Error al actualizar perfil: " + error.message, "error");
-    } else {
-      showMessage("Perfil de socio actualizado", "success");
-      fetchEventos();
-    }
-  };
-
   const eventosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (!q) return eventos;
@@ -315,7 +464,13 @@ export default function AdminPortal() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
+              <button
+                onClick={() => setStaffModalOpen(true)}
+                className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-400/20 transition flex items-center gap-1.5"
+              >
+                🔑 PINs Staff Puerta
+              </button>
               {isMaster && (
                 <button
                   onClick={() => setShowClientes(!showClientes)}
@@ -341,6 +496,68 @@ export default function AdminPortal() {
             </div>
           </div>
         </div>
+
+        {/* Modal de Creación de PINs para Staff de Puerta */}
+        {staffModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md rounded-3xl border border-emerald-500/30 bg-[#111823] p-6 shadow-2xl space-y-5">
+              <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-white">🔑 Crear Acceso Staff de Puerta</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Genera un PIN directo para escanear sin exponer tu clave</p>
+                </div>
+                <button
+                  onClick={() => setStaffModalOpen(false)}
+                  className="text-slate-400 hover:text-white transition text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={crearPinStaff} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre del Validador / Puerta *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej. Puerta 1 - Acceso General"
+                    value={nuevoStaffNombre}
+                    onChange={(e) => setNuevoStaffNombre(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">PIN de 4 dígitos (Opcional - Deja vacío para auto-generar)</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Ej. 4920"
+                    value={nuevoStaffPin}
+                    onChange={(e) => setNuevoStaffPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-emerald-300 font-mono font-bold outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStaffModalOpen(false)}
+                    className="w-1/2 rounded-xl border border-white/15 bg-white/5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-white/10 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="w-1/2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-2.5 text-xs font-bold text-white shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition"
+                  >
+                    ✓ Generar & Compartir PIN
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {showClientes && isMaster ? (
           <div className="animate-fade-in space-y-6">
@@ -468,20 +685,180 @@ export default function AdminPortal() {
                           <td className="px-4 py-3 text-xs font-mono text-cyan-300">{sol.email}</td>
                           <td className="px-4 py-3 text-xs font-mono">{sol.telefono}</td>
                           <td className="px-4 py-3 text-xs text-amber-300 font-semibold">{sol.aforo_estimado}</td>
-                          <td className="px-4 py-3 text-right">
-                            <a
-                              href={`https://wa.me/${(sol.telefono || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${sol.nombre_contacto} 👋, te escribo de Q-Pass sobre tu solicitud para ${sol.nombre_empresa}.`)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition"
+                          <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
+                            {(() => {
+                              const cleanTel = (sol.telefono || '').replace(/\D/g, '');
+                              const formattedTel = cleanTel.length === 10 ? `52${cleanTel}` : cleanTel;
+                              return (
+                                <a
+                                  href={`https://wa.me/${formattedTel}?text=${encodeURIComponent(`Hola ${sol.nombre_contacto} 👋, te escribo de Q-Pass sobre tu solicitud para ${sol.nombre_empresa}.`)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition"
+                                >
+                                  💬 Contactar
+                                </a>
+                              );
+                            })()}
+                            <button
+                              onClick={() => abrirModalAprobacion(sol)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-cyan-500/20 border border-cyan-400/30 px-3 py-1.5 text-xs font-bold text-cyan-300 hover:bg-cyan-500/30 transition active:scale-95"
                             >
-                              💬 Contactar por WhatsApp
-                            </a>
+                              ✓ Aprobar Socio
+                            </button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* Modal para Personalizar Aprobación de Socio */}
+            {solicitudSeleccionada && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+                <div className="relative w-full max-w-lg rounded-3xl border border-white/15 bg-[#111823] p-6 shadow-2xl space-y-5">
+                  <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Aprobar Socio & Configurar Acceso</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">{solicitudSeleccionada.nombre_empresa}</p>
+                    </div>
+                    <button
+                      onClick={() => setSolicitudSeleccionada(null)}
+                      className="text-slate-400 hover:text-white transition text-sm font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form onSubmit={confirmarAprobacionSocio} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Email de Inicio de Sesión *</label>
+                      <input
+                        type="email"
+                        required
+                        value={solicitudSeleccionada.email}
+                        onChange={(e) => setSolicitudSeleccionada({ ...solicitudSeleccionada, email: e.target.value })}
+                        className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Contraseña Asignada / Generada *</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          value={solicitudSeleccionada.password}
+                          onChange={(e) => setSolicitudSeleccionada({ ...solicitudSeleccionada, password: e.target.value })}
+                          className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-cyan-300 outline-none focus:border-cyan-400 font-mono font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const randomNum = Math.floor(1000 + Math.random() * 9000);
+                            setSolicitudSeleccionada({ ...solicitudSeleccionada, password: `QPass#${randomNum}` });
+                          }}
+                          className="absolute right-2 top-2 text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 px-2.5 py-1 rounded-lg hover:bg-cyan-500/30 transition"
+                        >
+                          Generar Nueva
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Puedes personalizar esta contraseña antes de enviársela al socio.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Comisión (%)</label>
+                        <input
+                          type="number"
+                          required
+                          value={solicitudSeleccionada.comision_porcentaje}
+                          onChange={(e) => setSolicitudSeleccionada({ ...solicitudSeleccionada, comision_porcentaje: Number(e.target.value) })}
+                          className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-cyan-300 outline-none focus:border-cyan-400 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Cargo Fijo ($)</label>
+                        <input
+                          type="number"
+                          required
+                          value={solicitudSeleccionada.comision_fija}
+                          onChange={(e) => setSolicitudSeleccionada({ ...solicitudSeleccionada, comision_fija: Number(e.target.value) })}
+                          className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2.5 text-sm text-amber-300 outline-none focus:border-cyan-400 font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setSolicitudSeleccionada(null)}
+                        className="w-1/2 rounded-xl border border-white/15 bg-white/5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-white/10 transition"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="w-1/2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 py-2.5 text-xs font-bold text-white shadow-lg hover:from-cyan-600 hover:to-cyan-700 transition"
+                      >
+                        ✓ Aprobar y Enviar Accesos
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de Credenciales para el Socio Aprobado */}
+            {credencialesModal?.open && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+                <div className="relative w-full max-w-md rounded-3xl border border-cyan-400/30 bg-[#111823] p-6 shadow-2xl space-y-6">
+                  <div className="text-center space-y-3">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-cyan-400/20 text-cyan-300 border border-cyan-400/30 text-2xl">
+                      🎉
+                    </div>
+                    <h3 className="text-xl font-bold text-white">¡Socio Aprobado Exitosamente!</h3>
+                    <p className="text-xs text-slate-400">
+                      Se han generado las credenciales de acceso para <strong className="text-white">{credencialesModal.empresa}</strong>.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-[#0a0f14] p-4 space-y-3 font-mono text-xs">
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Email del Socio</p>
+                      <p className="text-white font-bold select-all mt-0.5">{credencialesModal.email}</p>
+                    </div>
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Contraseña Temporal</p>
+                      <p className="text-cyan-300 font-bold text-base select-all mt-0.5">{credencialesModal.password}</p>
+                    </div>
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-sans">Link de Acceso al Portal</p>
+                      <p className="text-slate-300 font-sans mt-0.5">http://localhost:3000/login</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {credencialesModal.whatsappUrl && (
+                      <a
+                        href={credencialesModal.whatsappUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-3 text-xs font-bold text-white shadow-lg hover:from-emerald-600 hover:to-emerald-700 transition"
+                      >
+                        💬 Enviar Accesos por WhatsApp al Socio
+                      </a>
+                    )}
+
+                    <button
+                      onClick={() => setCredencialesModal(null)}
+                      className="w-full rounded-xl border border-white/15 bg-white/5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-white/10 transition"
+                    >
+                      Cerrar Ventana
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -618,6 +995,89 @@ export default function AdminPortal() {
                     </div>
                   )
                 )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+                    Banner del Evento (Subir Archivo o URL)
+                  </label>
+                  
+                  <div className="space-y-2">
+                    {/* Botón de Cargar Archivo */}
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3.5 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-400/20 transition flex items-center gap-1.5">
+                        📁 Seleccionar Imagen
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 8 * 1024 * 1024) {
+                              toast.error("La imagen no debe pesar más de 8MB");
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              const img = new window.Image();
+                              img.onload = () => {
+                                const canvas = document.createElement("canvas");
+                                const maxW = 1000;
+                                const scale = Math.min(1, maxW / img.width);
+                                canvas.width = img.width * scale;
+                                canvas.height = img.height * scale;
+                                const ctx = canvas.getContext("2d");
+                                if (ctx) {
+                                  ctx.fillStyle = "#FFFFFF";
+                                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                  const jpegUrl = canvas.toDataURL("image/jpeg", 0.85);
+                                  updateFormField("banner_url", jpegUrl);
+                                  toast.success("Imagen de banner procesada para PDF y Web");
+                                } else {
+                                  updateFormField("banner_url", event.target?.result as string);
+                                }
+                              };
+                              img.src = event.target?.result as string;
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-sans">o pega un enlace abajo</span>
+                    </div>
+
+                    <input
+                      type="url"
+                      placeholder="https://ejemplo.com/banner-evento.jpg"
+                      className="w-full rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2 text-xs text-white placeholder:text-slate-500 outline-none transition focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30"
+                      value={formData.banner_url || ""}
+                      onChange={(e) => updateFormField("banner_url", e.target.value)}
+                      onBlur={(e) => convertirUrlExterna(e.target.value)}
+                    />
+                  </div>
+
+                  {formData.banner_url && (
+                    <div className="mt-2 relative rounded-xl overflow-hidden border border-white/10 h-24 w-full">
+                      <img 
+                        src={formData.banner_url} 
+                        alt="Vista previa del banner" 
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateFormField("banner_url", "")}
+                        className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white text-[10px] px-2 py-1 rounded-md"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    🖼️ Se mostrará en la portada del evento y se imprimirá en los boletos PDF.
+                  </p>
+                </div>
 
                 <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm">
                   <input

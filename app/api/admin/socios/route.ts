@@ -129,3 +129,122 @@ export async function GET(req: Request) {
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { email, password, nombreEmpresa, nombreContacto, comision_porcentaje, comision_fija, leadId } = body;
+
+    if (!email || !nombreEmpresa) {
+      return NextResponse.json({ success: false, error: 'Email y Nombre de Empresa son requeridos' }, { status: 400 });
+    }
+
+    const supabaseAdmin = createAdminClient();
+    const cleanEmail = email.toLowerCase().trim();
+    const tempPassword = password || 'QPass2026!';
+
+    // 1. Crear usuario en Auth de Supabase con contraseña
+    const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+      email: cleanEmail,
+      password: tempPassword,
+      email_confirm: true,
+      user_metadata: { nombre: nombreContacto || nombreEmpresa, empresa: nombreEmpresa }
+    });
+
+    let userId = newUser?.user?.id;
+
+    if (createErr || !userId) {
+      // Si el correo ya existía, obtener su ID
+      const { data: listUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const existing = listUsers?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+      if (existing) {
+        userId = existing.id;
+        // Actualizar contraseña si se proporcionó una nueva
+        await supabaseAdmin.auth.admin.updateUserById(userId, { password: tempPassword });
+      } else {
+        return NextResponse.json({ success: false, error: createErr?.message || 'Error al crear socio' }, { status: 400 });
+      }
+    }
+
+    // 2. Insertar o actualizar perfiles como organizador
+    await supabaseAdmin.from('perfiles').upsert({
+      id: userId,
+      email: cleanEmail,
+      nombre: nombreContacto || nombreEmpresa,
+      rol: 'organizador'
+    });
+
+    // 3. Insertar o actualizar perfiles_cliente con la comisión asignada por Superadmin
+    await supabaseAdmin.from('perfiles_cliente').upsert({
+      user_id: userId,
+      nombre_empresa: nombreEmpresa,
+      comision_porcentaje: comision_porcentaje !== undefined ? Number(comision_porcentaje) : 10,
+      comision_fija: comision_fija !== undefined ? Number(comision_fija) : 0
+    });
+
+    // 4. Si se proporcionó un leadId, marcar como aprobado
+    if (leadId) {
+      try {
+        await supabaseAdmin.from('solicitudes_organizador').update({ estado: 'aprobado' }).eq('id', leadId);
+      } catch {
+        // Ignorar si la tabla no existe
+      }
+    }
+
+    // 5. Mensaje listo para enviar por WhatsApp o Email
+    const invitationText = 
+      `¡Bienvenido a Q-Pass! 🎉 Tu cuenta de Socio para *${nombreEmpresa}* ha sido APROBADA.\n\n` +
+      `Tus datos de acceso para publicar eventos:\n` +
+      `🌐 *Portal:* ${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/login\n` +
+      `✉️ *Email:* ${cleanEmail}\n` +
+      `🔑 *Contraseña:* ${tempPassword}\n\n` +
+      `¡Mucho éxito en tus ventas!`;
+
+    return NextResponse.json({
+      success: true,
+      message: `Cuenta de socio para ${nombreEmpresa} creada/aprobada con éxito`,
+      userId,
+      email: cleanEmail,
+      password: tempPassword,
+      invitationText
+    });
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error creando usuario socio';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const { userId, comision_porcentaje, comision_fija, nombre_empresa } = body;
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Falta userId' }, { status: 400 });
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    const updatePayload: Record<string, any> = {};
+    if (comision_porcentaje !== undefined) updatePayload.comision_porcentaje = Number(comision_porcentaje);
+    if (comision_fija !== undefined) updatePayload.comision_fija = Number(comision_fija);
+    if (nombre_empresa !== undefined) updatePayload.nombre_empresa = nombre_empresa;
+
+    const { error } = await supabaseAdmin
+      .from('perfiles_cliente')
+      .upsert({
+        user_id: userId,
+        ...updatePayload
+      });
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Tarifa del socio actualizada correctamente' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error actualizando tarifa';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}

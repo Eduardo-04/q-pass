@@ -24,6 +24,7 @@ import { toast } from "sonner";
 export default function LandingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [procesando, setProcesando] = useState(false);
+  const [enviadoUrl, setEnviadoUrl] = useState<string | null>(null);
   const [formLead, setFormLead] = useState({
     nombreEmpresa: "",
     nombreContacto: "",
@@ -48,18 +49,15 @@ export default function LandingPage() {
         throw new Error(data.error || "No se pudo enviar la solicitud");
       }
 
-      toast.success("¡Solicitud enviada con éxito! Abrimos chat de atención directa...");
-      setModalOpen(false);
-      setFormLead({
-        nombreEmpresa: "",
-        nombreContacto: "",
-        email: "",
-        telefono: "",
-        aforoEstimado: "100-500"
-      });
-
+      toast.success("¡Solicitud enviada con éxito!");
       if (data.whatsappUrl) {
-        window.open(data.whatsappUrl, "_blank");
+        setEnviadoUrl(data.whatsappUrl);
+        // Intentar redirección directa si el navegador lo permite
+        try {
+          window.location.href = data.whatsappUrl;
+        } catch {
+          // Si falla o se bloquea, se muestra la pantalla de éxito con el botón manual
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error inesperado";
@@ -74,9 +72,8 @@ export default function LandingPage() {
       {/* Navbar Minimalista */}
       <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-[#0a0f14]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/q-pass-logo.png" alt="Q-Pass Logo" width={40} height={40} />
-            <span className="text-xl font-bold tracking-tighter text-white">Q-PASS</span>
+          <Link href="/" className="flex items-center">
+            <span className="text-2xl font-black tracking-widest text-white transition hover:text-cyan-400">Q-PASS</span>
           </Link>
           <div className="hidden items-center gap-8 md:flex">
             <a href="#beneficios" className="text-sm font-medium text-slate-400 transition hover:text-cyan-400">Beneficios</a>
@@ -105,10 +102,10 @@ export default function LandingPage() {
             <Image 
               src="/q-pass-logo.png" 
               alt="Q-Pass Logo" 
-              width={200} 
-              height={200} 
+              width={340} 
+              height={340} 
               priority
-              className="drop-shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+              className="drop-shadow-[0_0_50px_rgba(34,211,238,0.55)] transition-transform hover:scale-105"
             />
           </div>
           
@@ -288,9 +285,8 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 py-12">
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
-            <div className="flex items-center gap-2">
-              <Image src="/q-pass-logo.png" alt="Q-Pass Logo" width={30} height={30} />
-              <span className="text-sm font-bold tracking-widest uppercase">Q-PASS</span>
+            <div className="flex items-center">
+              <Image src="/q-pass-logo.png" alt="Q-Pass Logo" width={110} height={35} className="h-8 w-auto object-contain" />
             </div>
             <p className="text-xs text-slate-500">
               © {new Date().getFullYear()} Q-Pass Digital Access. Powered by Lizard Tech.
@@ -324,7 +320,40 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSolicitarAlta} className="space-y-4">
+            {enviadoUrl ? (
+              <div className="text-center space-y-5 py-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 text-3xl">
+                  ✓
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">¡Solicitud Registrada!</h3>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    Tu solicitud ha quedado guardada en nuestro sistema. Para agilizar tu alta y configurar tus comisiones, inicia la conversación directa por WhatsApp:
+                  </p>
+                </div>
+
+                <a
+                  href={enviadoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center gap-2.5 w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-3.5 text-sm font-bold text-white shadow-xl transition hover:from-emerald-600 hover:to-emerald-700 active:scale-95"
+                >
+                  <MessageSquare size={20} />
+                  💬 Abrir Chat de WhatsApp (+52 966 593 9118)
+                </a>
+
+                <button
+                  onClick={() => {
+                    setEnviadoUrl(null);
+                    setModalOpen(false);
+                  }}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition"
+                >
+                  Cerrar ventana
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSolicitarAlta} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre de la Empresa o Evento *</label>
                 <div className="relative">
@@ -415,6 +444,7 @@ export default function LandingPage() {
                 {procesando ? "Enviando solicitud..." : "Enviar Solicitud y Contactar por WhatsApp"}
               </button>
             </form>
+          )}
           </div>
         </div>
       )}

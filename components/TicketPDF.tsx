@@ -168,6 +168,21 @@ const pdfStyles = StyleSheet.create({
     color: colors.primary,
     fontWeight: 'bold',
   },
+  bannerContainer: {
+    width: '100%',
+    height: 110,
+    backgroundColor: '#070a0f',
+    borderRadius: 8,
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+  },
 });
 
 interface Evento {
@@ -176,6 +191,7 @@ interface Evento {
   precio?: number;
   comision_porcentaje?: number;
   comision_fija?: number;
+  banner_url?: string;
 }
 
 interface TicketData {
@@ -200,6 +216,11 @@ export const TicketPDF = ({ ticketData, evento, qrCodeBase64, asistente }: {
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.container}>
           <View style={pdfStyles.header}>
+            {evento?.banner_url && (
+              <View style={pdfStyles.bannerContainer}>
+                <Image src={evento.banner_url} style={pdfStyles.bannerImage} />
+              </View>
+            )}
             <View style={pdfStyles.logo}>
               <View>
                 <Text style={pdfStyles.logoText}>Q-PASS</Text>

@@ -15,6 +15,7 @@ type Evento = {
   activo: boolean;
   capacidad?: number;
   precio?: number;
+  banner_url?: string;
 };
 
 type Asistente = {
@@ -200,6 +201,21 @@ export default function HomePage() {
         {/* Formulario */}
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
           <div className="rounded-2xl border border-white/10 bg-[#111823]/80 backdrop-blur-sm shadow-2xl overflow-hidden">
+            {eventoActual?.banner_url && (
+              <div className="relative w-full h-64 sm:h-72 overflow-hidden bg-[#070a0f] border-b border-white/10 flex items-center justify-center">
+                <img 
+                  src={eventoActual.banner_url} 
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover blur-xl opacity-30 pointer-events-none"
+                />
+                <img 
+                  src={eventoActual.banner_url} 
+                  alt={`Banner de ${eventoActual.nombre}`}
+                  className="relative z-10 h-full max-h-64 sm:max-h-72 w-auto object-contain transition-all drop-shadow-md"
+                />
+                <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#111823] via-transparent to-transparent z-20" />
+              </div>
+            )}
             <div className="border-b border-white/10 bg-gradient-to-r from-cyan-500/5 to-transparent px-6 py-4">
               <h2 className="text-lg font-semibold text-white">Datos de la compra</h2>
               <p className="text-xs text-slate-400">Completa la información de los asistentes</p>

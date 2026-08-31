@@ -36,27 +36,33 @@ export async function POST(req: Request) {
       console.warn("Tabla solicitudes_organizador no existe en Supabase. Creando cuenta de socio en perfiles_cliente:", errInsert.message);
       
       try {
-        // Crear usuario en Auth de Supabase si no existe
-        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        // Intentar crear usuario con su correo
+        let { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: cleanEmail,
           email_confirm: true,
           user_metadata: { nombre: nombreContacto, empresa: nombreEmpresa }
         });
 
+        let targetEmail = cleanEmail;
         let targetUserId = newUser?.user?.id;
 
-        // Si el correo ya existía en Auth, obtener su ID
+        // Si el correo ya existía en Auth (ej. pruebas repetidas con el mismo email),
+        // creamos una cuenta de socio secundaria única para evitar sobreescribir al socio existente
         if (createErr || !targetUserId) {
-          const { data: listUsers } = await supabaseAdmin.auth.admin.listUsers();
-          const existing = listUsers?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
-          if (existing) targetUserId = existing.id;
+          targetEmail = `socio_${Date.now()}@qpass.com`;
+          const { data: fallbackUser } = await supabaseAdmin.auth.admin.createUser({
+            email: targetEmail,
+            email_confirm: true,
+            user_metadata: { nombre: nombreContacto, empresa: nombreEmpresa, emailOriginal: cleanEmail }
+          });
+          targetUserId = fallbackUser?.user?.id;
         }
 
         if (targetUserId) {
           // Registrar en tabla perfiles como organizador
           await supabaseAdmin.from('perfiles').upsert({
             id: targetUserId,
-            email: cleanEmail,
+            email: targetEmail,
             nombre: nombreContacto,
             rol: 'organizador'
           });
