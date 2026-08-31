@@ -32,6 +32,22 @@ export default function AdminPortal() {
   const [isLoading, setIsLoading] = useState({ form: false, delete: false });
   const [busqueda, setBusqueda] = useState("");
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  const [zonasForm, setZonasForm] = useState<Array<{ id: string; nombre: string; precio: number; capacidad: number; descripcion: string }>>([]);
+
+  const agregarZona = () => {
+    setZonasForm(prev => [
+      ...prev,
+      { id: crypto.randomUUID(), nombre: `Zona ${prev.length + 1}`, precio: formData.precio || 100, capacidad: 100, descripcion: "" }
+    ]);
+  };
+
+  const eliminarZona = (index: number) => {
+    setZonasForm(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const actualizarZona = (index: number, field: string, value: any) => {
+    setZonasForm(prev => prev.map((z, i) => i === index ? { ...z, [field]: value } : z));
+  };
 
   const [userProfile, setUserProfile] = useState<PerfilCliente | null>(null);
   const [showClientes, setShowClientes] = useState(false);
@@ -200,13 +216,14 @@ export default function AdminPortal() {
   const resetForm = useCallback(() => {
     setEditingId(null);
     setFormData(initialFormState);
+    setZonasForm([]);
   }, []);
 
   const updateFormField = useCallback(<K extends keyof EventoFormData>(field: K, value: EventoFormData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  const cargarEventoParaEditar = useCallback((ev: Evento) => {
+  const cargarEventoParaEditar = useCallback(async (ev: Evento) => {
     setEditingId(ev.id);
     setFormData({
       nombre: ev.nombre ?? "",
@@ -219,7 +236,20 @@ export default function AdminPortal() {
       comision_porcentaje: ev.comision_porcentaje ?? 10,
       comision_fija: ev.comision_fija ?? 0,
       banner_url: ev.banner_url ?? "",
+      mapa_zonas_url: ev.mapa_zonas_url ?? "",
     });
+
+    // Intentar cargar zonas de la tabla zonas_evento si existe
+    try {
+      const { data: zData } = await supabase
+        .from("zonas_evento")
+        .select("*")
+        .eq("evento_id", ev.id);
+      setZonasForm((zData as any[]) || []);
+    } catch {
+      setZonasForm([]);
+    }
+
     showMessage(`Editando: ${ev.nombre}`, "info");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
@@ -349,27 +379,48 @@ export default function AdminPortal() {
     if (formData.banner_url) {
       payload.banner_url = formData.banner_url;
     }
+    if (formData.mapa_zonas_url) {
+      payload.mapa_zonas_url = formData.mapa_zonas_url;
+    }
 
-    let { error } = editingId 
-      ? await supabase.from("eventos").update(payload).eq("id", editingId)
-      : await supabase.from("eventos").insert([payload]);
+    let targetEventId = editingId;
+    let { error, data: saveRes } = editingId 
+      ? await supabase.from("eventos").update(payload).eq("id", editingId).select()
+      : await supabase.from("eventos").insert([payload]).select();
 
-    if (error && error.message.includes("banner_url")) {
-      // Fallback: Si la columna banner_url aún no existe en Supabase, reintentar guardando los datos del evento
+    if (error && (error.message.includes("banner_url") || error.message.includes("mapa_zonas_url"))) {
+      // Fallback: Si alguna columna opcional aún no existe en Supabase
       delete payload.banner_url;
+      delete payload.mapa_zonas_url;
       const retry = editingId 
-        ? await supabase.from("eventos").update(payload).eq("id", editingId)
-        : await supabase.from("eventos").insert([payload]);
+        ? await supabase.from("eventos").update(payload).eq("id", editingId).select()
+        : await supabase.from("eventos").insert([payload]).select();
       
       error = retry.error;
-      if (!error) {
-        toast.warning("Evento guardado. Ejecuta el SQL en Supabase para activar los banners.");
-      }
+      saveRes = retry.data;
     }
 
     if (error) {
       showMessage(`Error al ${editingId ? "actualizar" : "crear"} evento: ${error.message}`, "error");
     } else {
+      targetEventId = saveRes?.[0]?.id || editingId;
+      if (targetEventId && zonasForm.length > 0) {
+        try {
+          for (const z of zonasForm) {
+            await supabase.from("zonas_evento").upsert({
+              evento_id: targetEventId,
+              nombre: z.nombre,
+              precio: Number(z.precio || 0),
+              capacidad: Number(z.capacidad || 100),
+              descripcion: z.descripcion || null,
+              activo: true
+            });
+          }
+        } catch {
+          // Ignorar silenciosamente si no se ha ejecutado el SQL de zonas_evento
+        }
+      }
+
       showMessage(`Evento ${editingId ? "actualizado" : "creado"} con éxito`, "success");
       resetForm();
       fetchEventos();
@@ -1088,6 +1139,113 @@ export default function AdminPortal() {
                   <p className="text-[10px] text-slate-500 mt-1">
                     🖼️ Se mostrará en la portada del evento y se imprimirá en los boletos PDF.
                   </p>
+                </div>
+
+                {/* 🗺️ MAPA DEL RECINTO */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+                    Mapa del Recinto / Ubicación de Zonas (Opcional)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer rounded-xl border border-white/20 bg-white/5 px-3.5 py-2 text-xs font-bold text-slate-300 hover:bg-white/10 transition flex items-center gap-1.5">
+                      🗺️ Subir Croquis/Mapa
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            updateFormField("mapa_zonas_url", evt.target?.result as string);
+                            toast.success("Mapa del recinto cargado");
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://ejemplo.com/mapa-zonas.jpg"
+                      className="flex-1 rounded-xl border border-white/15 bg-[#0a0f14] px-4 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
+                      value={formData.mapa_zonas_url || ""}
+                      onChange={(e) => updateFormField("mapa_zonas_url", e.target.value)}
+                    />
+                  </div>
+                  {formData.mapa_zonas_url && (
+                    <div className="mt-2 relative rounded-xl overflow-hidden border border-white/10 h-28 w-full">
+                      <img src={formData.mapa_zonas_url} alt="Mapa del recinto" className="w-full h-full object-contain bg-black/60" />
+                      <button type="button" onClick={() => updateFormField("mapa_zonas_url", "")} className="absolute top-2 right-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded">Quitar</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 🎟️ GESTOR DE ZONAS Y ETAPAS DE PREVENTA */}
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">🎟️ Zonas y Etapas de Preventa (Fases)</h4>
+                      <p className="text-[10px] text-slate-400">Agrega zonas (ej: VIP, Preferente) o etapas (ej: Fase 1, Preventa)</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={agregarZona}
+                      className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-cyan-600 transition"
+                    >
+                      + Agregar Zona / Fase
+                    </button>
+                  </div>
+
+                  {zonasForm.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 italic py-1">
+                      No has agregado zonas específicas. El evento usará el precio base general (${formData.precio} MXN).
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5 pt-1">
+                      {zonasForm.map((zona, idx) => (
+                        <div key={zona.id || idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-[#0a0f14] p-3 rounded-xl border border-white/10 items-center">
+                          <div className="sm:col-span-4">
+                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Nombre Zona / Fase</label>
+                            <input
+                              type="text"
+                              placeholder="ej: VIP Front Stage"
+                              className="w-full bg-[#111823] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              value={zona.nombre}
+                              onChange={(e) => actualizarZona(idx, "nombre", e.target.value)}
+                            />
+                          </div>
+                          <div className="sm:col-span-3">
+                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Precio ($ MXN)</label>
+                            <input
+                              type="number"
+                              className="w-full bg-[#111823] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-bold"
+                              value={zona.precio}
+                              onChange={(e) => actualizarZona(idx, "precio", Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="sm:col-span-3">
+                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Capacidad</label>
+                            <input
+                              type="number"
+                              className="w-full bg-[#111823] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              value={zona.capacidad}
+                              onChange={(e) => actualizarZona(idx, "capacidad", Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="sm:col-span-2 text-right pt-3 sm:pt-0">
+                            <button
+                              type="button"
+                              onClick={() => eliminarZona(idx)}
+                              className="text-xs text-red-400 hover:text-red-300 font-bold bg-red-500/10 px-2 py-1.5 rounded-lg border border-red-500/20"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-[#0a0f14] px-3 py-2 text-sm">

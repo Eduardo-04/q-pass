@@ -114,7 +114,10 @@ export async function POST(req: Request) {
 
         orderId = nuevaOrden.id;
 
-        // 2. Crear Boletos (Usando columna fecha_compra oficial)
+        const rawZonaId = body.zona_id || null;
+        const rawNombreZona = body.nombre_zona || "Acceso General";
+
+        // 2. Crear Boletos (Usando columna fecha_compra oficial y zona_id/nombre_zona)
         const boletosPayload = rawAsistentes.map((ast: { nombreCompleto: string; email: string }) => ({
           evento_id: rawEventoId,
           order_id: orderId,
@@ -122,12 +125,20 @@ export async function POST(req: Request) {
           nombre_comprador: ast.nombreCompleto,
           precio_unitario: evento.precio,
           estado: statusInicial,
-          fecha_compra: new Date().toISOString()
+          fecha_compra: new Date().toISOString(),
+          zona_id: rawZonaId,
+          nombre_zona: rawNombreZona,
         }));
 
-        const { error: errBoletos } = await supabaseAdmin
+        let { error: errBoletos } = await supabaseAdmin
           .from('boletos')
           .insert(boletosPayload);
+
+        if (errBoletos && errBoletos.message?.includes('zona')) {
+          const cleanPayload = boletosPayload.map(({ zona_id, nombre_zona, ...rest }: any) => rest);
+          const retry = await supabaseAdmin.from('boletos').insert(cleanPayload);
+          errBoletos = retry.error;
+        }
 
         if (errBoletos) {
           throw new Error(errBoletos.message || 'Error al crear boletos');

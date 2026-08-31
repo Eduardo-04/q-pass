@@ -196,13 +196,15 @@ interface Evento {
 
 interface TicketData {
   id: string;
+  nombre_zona?: string;
 }
 
-export const TicketPDF = ({ ticketData, evento, qrCodeBase64, asistente }: { 
+export const TicketPDF = ({ ticketData, evento, qrCodeBase64, asistente, nombreZona }: { 
   ticketData: TicketData; 
   evento: Evento; 
   qrCodeBase64: string;
   asistente: { nombreCompleto: string, email: string };
+  nombreZona?: string;
 }) => {
   const fechaFormateada = evento?.fecha_evento ? new Date(evento.fecha_evento).toLocaleDateString('es-MX', {
     weekday: 'long',
@@ -210,6 +212,8 @@ export const TicketPDF = ({ ticketData, evento, qrCodeBase64, asistente }: {
     month: 'long',
     day: 'numeric'
   }) : 'Fecha por confirmar';
+
+  const textoZonaBadge = (nombreZona || ticketData?.nombre_zona || 'ENTRADA DIGITAL').toUpperCase();
 
   return (
     <Document>
@@ -227,7 +231,7 @@ export const TicketPDF = ({ ticketData, evento, qrCodeBase64, asistente }: {
                 <Text style={pdfStyles.logoSub}>Sistema de Acceso Digital</Text>
               </View>
               <View style={pdfStyles.eventBadge}>
-                <Text style={pdfStyles.eventBadgeText}>ENTRADA DIGITAL</Text>
+                <Text style={pdfStyles.eventBadgeText}>{textoZonaBadge}</Text>
               </View>
             </View>
             <View style={pdfStyles.eventTitle}>

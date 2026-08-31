@@ -17,6 +17,18 @@ export interface PerfilCliente {
   actualizado_el?: string;
 }
 
+// ─── Zonas / Fases de Preventa ───────────────────────────
+export interface ZonaEvento {
+  id: string;
+  evento_id?: string;
+  nombre: string;
+  precio: number;
+  capacidad: number;
+  vendidos?: number;
+  descripcion?: string;
+  activo?: boolean;
+}
+
 // ─── Eventos ─────────────────────────────────────────────
 export interface Evento {
   id: string;
@@ -31,6 +43,8 @@ export interface Evento {
   comision_fija: number;
   organizador_id?: string;
   banner_url?: string;
+  mapa_zonas_url?: string;
+  zonas?: ZonaEvento[];
 }
 
 export type EventoFormData = Omit<Evento, 'id'>;
@@ -48,6 +62,8 @@ export interface Boleto {
   nombre_comprador?: string;
   precio_unitario?: number;
   qr_code?: string;
+  zona_id?: string;
+  nombre_zona?: string;
 }
 
 // ─── Orders ──────────────────────────────────────────────

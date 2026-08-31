@@ -18,6 +18,7 @@ type Evento = {
   comision_porcentaje?: number;
   comision_fija?: number;
   banner_url?: string;
+  mapa_zonas_url?: string;
 };
 
 type Asistente = {
@@ -48,7 +49,7 @@ export default function HomePage() {
     const fetchEventos = async () => {
       const { data, error } = await supabase
         .from("eventos")
-        .select("id, nombre, fecha_evento, visible_desde, visible_hasta, activo, capacidad, precio, comision_porcentaje, comision_fija, banner_url")
+        .select("id, nombre, fecha_evento, visible_desde, visible_hasta, activo, capacidad, precio, comision_porcentaje, comision_fija, banner_url, mapa_zonas_url")
         .eq("activo", true)
         .lte("visible_desde", hoy)
         .gte("visible_hasta", hoy)
@@ -69,10 +70,53 @@ export default function HomePage() {
     fetchEventos();
   }, [hoy]);
 
+  const [zonas, setZonas] = useState<any[]>([]);
+  const [selectedZonaId, setSelectedZonaId] = useState<string>("");
+  const [showMapaModal, setShowMapaModal] = useState(false);
+
+  useEffect(() => {
+    if (!selectedEvento) return;
+    const fetchZonas = async () => {
+      try {
+        const { data } = await supabase
+          .from("zonas_evento")
+          .select("*")
+          .eq("evento_id", selectedEvento)
+          .eq("activo", true);
+        const zList = (data as any[]) || [];
+        setZonas(zList);
+        if (zList.length > 0) {
+          setSelectedZonaId(zList[0].id);
+        } else {
+          setSelectedZonaId("");
+        }
+      } catch {
+        setZonas([]);
+        setSelectedZonaId("");
+      }
+    };
+    fetchZonas();
+  }, [selectedEvento]);
+
   const eventoActual = useMemo(
     () => eventos.find((e) => e.id === selectedEvento),
     [eventos, selectedEvento]
   );
+
+  const zonaSeleccionada = useMemo(
+    () => zonas.find((z) => z.id === selectedZonaId),
+    [zonas, selectedZonaId]
+  );
+
+  const precioUnitario = Number(zonaSeleccionada ? zonaSeleccionada.precio : (eventoActual?.precio || 0));
+  const subtotalBoletos = asistentes.length * precioUnitario;
+  
+  // Cargo por Servicio Digital (Comisión asignada al evento o default 10% + $0)
+  const pctComision = Number(eventoActual?.comision_porcentaje ?? 10);
+  const fijaComision = Number(eventoActual?.comision_fija ?? 0);
+  const cargoPorBoleto = precioUnitario > 0 ? (precioUnitario * (pctComision / 100)) + fijaComision : 0;
+  const totalCargoServicio = Math.round(asistentes.length * cargoPorBoleto * 100) / 100;
+  const totalFinal = subtotalBoletos + totalCargoServicio;
 
   const handleCantidadChange = (cantidad: number) => {
     setCantidadBoletos(cantidad);
@@ -145,7 +189,9 @@ export default function HomePage() {
           evento_id: selectedEvento,
           asistentes: asistentesNormalizados,
           email_comprador: mainEmail,
-          total: totalFinal
+          total: totalFinal,
+          zona_id: selectedZonaId || null,
+          nombre_zona: zonaSeleccionada?.nombre || "Acceso General"
         }),
       });
 
@@ -174,16 +220,6 @@ export default function HomePage() {
       setLoading(false);
     }
   };
-
-  const precioUnitario = Number(eventoActual?.precio || 0);
-  const subtotalBoletos = asistentes.length * precioUnitario;
-  
-  // Cargo por Servicio Digital (Comisión asignada al evento o default 10% + $0)
-  const pctComision = Number(eventoActual?.comision_porcentaje ?? 10);
-  const fijaComision = Number(eventoActual?.comision_fija ?? 0);
-  const cargoPorBoleto = precioUnitario > 0 ? (precioUnitario * (pctComision / 100)) + fijaComision : 0;
-  const totalCargoServicio = Math.round(asistentes.length * cargoPorBoleto * 100) / 100;
-  const totalFinal = subtotalBoletos + totalCargoServicio;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0f14] via-[#0d1219] to-[#0a0f14]">
@@ -264,6 +300,66 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
+
+              {/* Selector de Zonas / Fases de Preventa */}
+              {zonas.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-cyan-300 uppercase tracking-wider">
+                      Selecciona tu Zona / Fase de Entrada
+                    </label>
+                    {eventoActual?.mapa_zonas_url && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMapaModal(true)}
+                        className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 underline flex items-center gap-1 transition"
+                      >
+                        🗺️ Ver Mapa del Recinto
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {zonas.map((z) => {
+                      const isSelected = z.id === selectedZonaId;
+                      return (
+                        <div
+                          key={z.id}
+                          onClick={() => setSelectedZonaId(z.id)}
+                          className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
+                            isSelected
+                              ? "border-cyan-400 bg-cyan-400/10 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+                              : "border-white/10 bg-[#0a0f14] hover:border-white/20"
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <h4 className="text-xs font-bold text-white uppercase">{z.nombre}</h4>
+                            <span className="text-xs font-extrabold text-cyan-300">${z.precio} MXN</span>
+                          </div>
+                          {z.descripcion && (
+                            <p className="text-[10px] text-slate-400 mt-1">{z.descripcion}</p>
+                          )}
+                          <div className="mt-2 text-[9px] font-mono uppercase text-slate-500">
+                            Capacidad: {z.capacidad} boletos
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Botón rápido si no hay selector arriba pero el evento tiene mapa de zonas */}
+              {zonas.length === 0 && eventoActual?.mapa_zonas_url && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowMapaModal(true)}
+                    className="text-xs font-bold text-cyan-400 hover:text-cyan-300 underline flex items-center gap-1 transition"
+                  >
+                    🗺️ Ver Mapa de Zonas y Ubicación del Recinto
+                  </button>
+                </div>
+              )}
 
               <div>
                 <label className="mb-2 block text-xs font-medium text-slate-300">Cantidad de boletos</label>
@@ -371,6 +467,26 @@ export default function HomePage() {
         <div className="mt-12 pt-6 text-center border-t border-white/10">
           <p className="text-[10px] uppercase tracking-wider text-slate-600">LIZARD TECH • Q-PASS DIGITAL ACCESS</p>
         </div>
+
+        {/* Modal Mapa del Recinto */}
+        {showMapaModal && eventoActual?.mapa_zonas_url && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+            <div className="relative max-w-2xl w-full rounded-2xl border border-white/20 bg-[#111823] p-5 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">🗺️ Mapa del Recinto y Zonas</h3>
+                <button
+                  onClick={() => setShowMapaModal(false)}
+                  className="rounded-lg bg-white/10 px-2.5 py-1 text-xs text-slate-300 hover:bg-white/20"
+                >
+                  ✕ Cerrar
+                </button>
+              </div>
+              <div className="w-full max-h-[70vh] overflow-auto rounded-xl bg-black/60 p-2 flex items-center justify-center">
+                <img src={eventoActual.mapa_zonas_url} alt="Mapa del recinto" className="max-w-full h-auto object-contain rounded-lg" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
